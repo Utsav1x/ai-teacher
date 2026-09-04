@@ -1344,6 +1344,7 @@ export default function ClassroomPage() {
                       <button
                         key={`${step.title}-${i}`}
                         type="button"
+                        disabled={i > sectionIndex}
                         onClick={() => {
                           setSectionIndex(i)
                           setPhase('teaching')
@@ -1352,7 +1353,9 @@ export default function ClassroomPage() {
                           'flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left transition-colors',
                           active
                             ? 'border-cyan-400/30 bg-cyan-500/5'
-                            : 'border-white/10 bg-slate-950/20 hover:border-cyan-400/20',
+                            : i > sectionIndex 
+                              ? 'cursor-not-allowed border-white/5 bg-slate-950/10 opacity-60'
+                              : 'border-white/10 bg-slate-950/20 hover:border-cyan-400/20',
                         )}
                       >
                         <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-[10px] text-slate-300">

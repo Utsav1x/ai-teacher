@@ -204,10 +204,10 @@ export default async function DashboardPage() {
                 <span className="text-sm font-medium text-muted-foreground">{weeklyGoal.progress}%</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                {formatStudyTime(weeklyGoal.completedMinutes)} of 5 hours completed this week.
+                {formatStudyTime(weeklyGoal.completedMinutes)} of {formatStudyTime(weeklyGoal.goalMinutes)} completed this week.
               </p>
-              <Button variant="outline" className="mt-1 w-full justify-center">
-                Adjust goal
+              <Button variant="outline" className="mt-1 w-full justify-center" disabled>
+                Adjust goal (Coming soon)
               </Button>
             </CardContent>
           </Card>
@@ -480,9 +480,12 @@ async function getWeeklyGoal() {
     0,
   )
 
+  const goalMinutes = 300 // 5 hours
+
   return {
     completedMinutes,
-    progress: Math.min(100, Math.round((completedMinutes / 300) * 100)),
+    goalMinutes,
+    progress: Math.min(100, Math.round((completedMinutes / goalMinutes) * 100)),
   }
 }
 

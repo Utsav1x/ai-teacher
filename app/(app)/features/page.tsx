@@ -29,9 +29,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { LinkButton } from '@/components/ui/link-button'
 import { Card, CardContent } from '@/components/ui/card'
+import { LinkButton } from '@/components/ui/link-button'
 import { PageHeader } from '@/components/app/page-header'
 
 const features = [
@@ -84,13 +83,8 @@ export default function FeaturesPage() {
         title="Your learning system, expanded"
         description="Explore every way Lumina can help you understand, practice, and remember more."
         actions={
-          <LinkButton
-            href="/start"
-            size="lg"
-            className="h-10 gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground"
-          >
-            <Sparkles className="size-4" />
-            Start a lesson
+          <LinkButton href="/start" size="lg" className="h-10 gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground">
+            <Sparkles className="size-4" />Start a lesson
           </LinkButton>
         }
       />
@@ -147,14 +141,8 @@ export default function FeaturesPage() {
                     </span>
                     {isEnabled ? 'Active' : 'Add tool'}
                   </button>
-                  <LinkButton
-                    href={feature.href}
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1 px-2 text-xs"
-                  >
-                    {feature.action}
-                    <ChevronRight className="size-3.5" />
+                  <LinkButton href={feature.href} variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs">
+                    {feature.action}<ChevronRight className="size-3.5" />
                   </LinkButton>
                 </div>
               </CardContent>
