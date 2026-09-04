@@ -1,86 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { MockTeacherEngine, type TeacherLessonId, type TeacherLesson } from '@/lib/teacher-engine'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type SubmittedAnswer = {
+  questionId: string
+  selectedIndex: number
+  correctIndex?: number
+  /** The concept the question tested, from the generated lesson. */
+  concept?: string
+}
+
 type AnswerRecord = {
   questionId: string
-  questionText: string
+  concept: string
   selectedIndex: number
   correctIndex?: number
   isCorrect: boolean
-  explanation: string
-}
-
-// ─── Engine scoring helpers ───────────────────────────────────────────────────
-
-const LESSON_TOPICS: Record<TeacherLessonId, { areas: string[]; weakAreas: string[] }> = {
-  'ai-teacher-demo-lesson-1': {
-    areas: ['Network architecture', 'Activation functions', 'Forward propagation'],
-    weakAreas: ['Gradient descent math', 'Chain rule intuition'],
-  },
-  'ai-teacher-demo-lesson-2': {
-    areas: ['Loss functions', 'Gradient descent', 'Weight updates'],
-    weakAreas: ['Backpropagation depth', 'Learning rate tuning'],
-  },
 }
 
 /**
- * Derive strong/weak areas and recommendations from per-question results.
- * Uses the MockTeacherEngine to produce per-answer feedback, then groups
- * correct answers into "strong" and wrong answers into "weak".
+ * Builds the report from the concepts the generated lesson actually tested.
+ *
+ * Previously this scored against two hardcoded demo lessons and invented
+ * mastery percentages with Math.random(), so a student who had just finished a
+ * Hindi lesson on photosynthesis received a report about gradient descent.
+ * Every figure here now comes from what the student answered.
  */
-async function deriveReport(
-  lesson: TeacherLesson,
-  lessonId: string,
-  answers: AnswerRecord[],
-  scorePct: number,
-) {
-  const engine = new MockTeacherEngine()
-  const topics = LESSON_TOPICS[lessonId] || { areas: [], weakAreas: [] }
+function deriveReport(answers: AnswerRecord[], scorePct: number) {
+  const correct = answers.filter((a) => a.isCorrect)
+  const incorrect = answers.filter((a) => !a.isCorrect)
 
-  // Build per-question evaluations
-  const evaluations = await Promise.all(
-    answers.map((a) => engine.evaluateAnswer(lesson, a.selectedIndex))
+  // Mastery is derived from the overall score, not fabricated per area.
+  const strong = correct.map((a) => ({
+    area: a.concept,
+    mastery: Math.max(60, Math.min(98, scorePct)),
+  }))
+
+  const weak = incorrect.map((a) => ({
+    area: a.concept,
+    mastery: Math.max(15, Math.min(50, scorePct)),
+  }))
+
+  const recommendations: string[] = incorrect.map(
+    (a) => `Revisit ${a.concept} — you answered this one incorrectly.`,
   )
 
-  const correctCount  = answers.filter((a) => a.isCorrect).length
-  const incorrectAnswers = answers.filter((a) => !a.isCorrect)
-
-  // Strong areas: cycle through known topic areas and assign mastery based on score
-  const strong = topics.areas.slice(0, Math.max(1, correctCount)).map((area, i) => ({
-    area,
-    mastery: Math.min(98, Math.round(scorePct - i * 4 + Math.random() * 6)),
-  }))
-
-  // Weak areas: every incorrectly-answered question maps to a weak area
-  const weak = incorrectAnswers.map((a, i) => ({
-    area: topics.weakAreas[i % Math.max(1, topics.weakAreas.length)] ?? `Question ${a.questionId}`,
-    mastery: Math.max(20, Math.round(40 - i * 8 + Math.random() * 15)),
-  }))
-
-  // Recommendations from engine reexplanations for wrong answers
-  const recommendations: string[] = [
-    ...incorrectAnswers.map((a, i) => {
-      const ev = evaluations[answers.indexOf(a)]
-      return ev.reexplanation.length > 10
-        ? ev.reexplanation
-        : `Review: ${a.questionText}`
-    }),
-  ]
-
-  // Always add at least one forward-looking recommendation
-  const continuation = await engine.continueLesson(lessonId)
-  if (continuation.nextLessonId) {
-    const nextLesson = await engine.getLessonById(continuation.nextLessonId)
-    recommendations.push(
-      `Next: "${nextLesson.title}" — ${nextLesson.objective}`,
-    )
-  }
   if (recommendations.length === 0) {
     recommendations.push(
-      'Great understanding overall. Move on to the next lesson to continue building.',
+      'Every checkpoint correct. Move on to the next topic to keep building.',
+    )
+  } else if (incorrect.length === answers.length) {
+    recommendations.push(
+      'Consider replaying the lesson before the next topic — none of the checkpoints landed yet.',
     )
   }
 
@@ -101,31 +73,24 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json() as {
-    lessonId: TeacherLessonId
-    answers: Array<{ questionId: string; selectedIndex: number }>
+    lessonId: string
+    lessonTitle?: string
+    answers: SubmittedAnswer[]
     timeSpentSeconds: number
     activityDate?: string
   }
 
-  const { lessonId, answers: rawAnswers, timeSpentSeconds } = body
+  const { lessonId, lessonTitle, answers: rawAnswers, timeSpentSeconds } = body
 
-  // Resolve lesson via engine
-  const engine = new MockTeacherEngine()
-  const lesson = await engine.getLessonById(lessonId)
-  const question = lesson.question
-
-  // Build detailed answer records
-  const answerRecords: AnswerRecord[] = rawAnswers.map((a) => {
-    const isCorrect = a.selectedIndex === question.correctIndex
-    return {
-      questionId:    a.questionId,
-      questionText:  question.prompt,
-      selectedIndex: a.selectedIndex,
-      correctIndex:  question.correctIndex,
-      isCorrect,
-      explanation:   question.explanation,
-    }
-  })
+  // The client sends the correct index and the concept alongside each answer,
+  // because only it knows what the AI generated for this particular lesson.
+  const answerRecords: AnswerRecord[] = (rawAnswers ?? []).map((a, i) => ({
+    questionId: a.questionId,
+    concept: a.concept?.trim() || `Checkpoint ${i + 1}`,
+    selectedIndex: a.selectedIndex,
+    correctIndex: a.correctIndex,
+    isCorrect: a.correctIndex !== undefined && a.selectedIndex === a.correctIndex,
+  }))
 
   const correctCount = answerRecords.filter((a) => a.isCorrect).length
   const total        = answerRecords.length
@@ -135,19 +100,24 @@ export async function POST(req: NextRequest) {
   const secs    = timeSpentSeconds % 60
   const timeSpent = minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`
 
-  const { strong, weak, recommendations } = await deriveReport(lesson, lessonId, answerRecords, scorePct)
+  const { strong, weak, recommendations } = deriveReport(answerRecords, scorePct)
 
-  // Resolve the seeded lesson without creating an incomplete database row.
-  const { data: lessonRow, error: lessonLookupError } = await supabase
-    .from('lessons')
-    .select('id')
-    .eq('title', lesson.title)
-    .eq('is_default', true)
-    .limit(1)
-    .maybeSingle()
+  // Match the `lessons` row the progress route created for this lesson. Seeded
+  // demo lessons are default-owned; generated ones belong to the learner.
+  const title = lessonTitle?.trim()
+  let lessonRow: { id: string } | null = null
 
-  if (lessonLookupError) {
-    console.error('[assessment/POST] Lesson lookup failed:', lessonLookupError.message)
+  if (title) {
+    const { data, error } = await supabase
+      .from('lessons')
+      .select('id')
+      .eq('title', title)
+      .order('is_default', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) console.error('[assessment/POST] Lesson lookup failed:', error.message)
+    lessonRow = (data as { id: string } | null) ?? null
   }
 
   // Completing an assessment completes the associated lesson in the learning path.
@@ -170,7 +140,9 @@ export async function POST(req: NextRequest) {
       console.error('[assessment/POST] Progress update failed:', progressError.message)
     }
   } else {
-    console.error(`[assessment/POST] No default lesson found for engine lesson: ${lessonId}`)
+    // The result is still saved; it just is not linked to a lesson row, which
+    // happens if the assessment is opened without having run the lesson.
+    console.warn(`[assessment/POST] No lessons row matched "${title ?? lessonId}"`)
   }
 
   const activityDate = /^\d{4}-\d{2}-\d{2}$/.test(body.activityDate ?? '')

@@ -160,7 +160,7 @@ function LoginContent() {
         )}
 
         <h1 className="mb-2 text-center text-xl font-semibold text-white">
-          {loggedOut ? 'See you again soon!' : 'Welcome 👋 Let&apos;s Get Started!'}
+          {loggedOut ? 'See you again soon!' : 'Welcome 👋 Let’s Get Started!'}
         </h1>
         <p className="mb-7 text-center text-sm text-white/40">
           {loggedOut ? 'Log back in when you are ready to continue.' : 'Sign in to continue to Lumina'}

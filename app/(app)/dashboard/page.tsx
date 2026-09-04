@@ -1,12 +1,20 @@
 import Link from 'next/link'
-import { ArrowRight, Clock, Play, Sparkles, TrendingUp } from 'lucide-react'
+import {
+  ArrowRight,
+  BookOpen,
+  Brain,
+  Clock,
+  LineChart,
+  Play,
+  Sparkles,
+  TrendingUp,
+} from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { LinkButton } from '@/components/ui/link-button'
 import { PageHeader } from '@/components/app/page-header'
-import { stats, recommendedTopic } from '@/lib/mock-data'
 import { auth } from '@/auth'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
@@ -23,21 +31,36 @@ export default async function DashboardPage() {
     getConceptsMastered(),
     getWeeklyGoal(),
   ])
-  const dashboardStats = stats.map((stat) =>
-    stat.label === 'Lessons completed'
-      ? { ...stat, value: String(completedLessons), delta: 'From your learning path' }
-      : stat.label === 'Avg. assessment'
-        ? {
-            ...stat,
-            value: averageAssessment === null ? '—' : `${averageAssessment}%`,
-            delta: averageAssessment === null ? 'No assessments yet' : 'From your assessments',
-          }
-        : stat.label === 'Study streak'
-          ? { ...stat, value: `${studyStreak} days`, delta: 'Assessment activity' }
-        : stat.label === 'Concepts mastered'
-          ? { ...stat, value: String(conceptsMastered), delta: 'Strong assessment areas' }
-        : stat,
-  )
+  const recommendedTopic = await getRecommendedTopic()
+  // Built from the queried values directly. Matching real numbers onto a mock
+  // template by label meant one renamed label would silently show a fabricated
+  // figure — "48 lessons completed" for a learner who has completed none.
+  const dashboardStats = [
+    {
+      label: 'Lessons completed',
+      value: String(completedLessons),
+      delta: 'From your learning path',
+      icon: BookOpen,
+    },
+    {
+      label: 'Study streak',
+      value: `${studyStreak} ${studyStreak === 1 ? 'day' : 'days'}`,
+      delta: studyStreak > 0 ? 'Keep it going' : 'Finish a lesson to start one',
+      icon: Sparkles,
+    },
+    {
+      label: 'Avg. assessment',
+      value: averageAssessment === null ? '—' : `${averageAssessment}%`,
+      delta: averageAssessment === null ? 'No assessments yet' : 'From your assessments',
+      icon: LineChart,
+    },
+    {
+      label: 'Concepts mastered',
+      value: String(conceptsMastered),
+      delta: conceptsMastered > 0 ? 'Strong assessment areas' : 'None yet',
+      icon: Brain,
+    },
+  ]
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
@@ -314,6 +337,78 @@ function getLocalDateKey(isoDate: string) {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date(isoDate))
+}
+
+/**
+ * What the learner should study next, derived from their own history.
+ *
+ * Prefers the weakest concept from the most recent assessment — the thing they
+ * demonstrably have not got yet. Falls back to a lesson they started and did
+ * not finish, and finally to a generic prompt for a learner with no history.
+ */
+async function getRecommendedTopic(): Promise<{
+  subject: string
+  title: string
+  reason: string
+  minutes: number
+}> {
+  const fallback = {
+    subject: 'Get started',
+    title: 'Pick a topic or upload your material',
+    reason: 'Once you finish a lesson, recommendations here follow your own results.',
+    minutes: 20,
+  }
+
+  const supabase = await createSupabaseServerClient()
+  if (!supabase) return fallback
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return fallback
+
+  // 1. Weakest concept from the latest assessment.
+  const { data: latest } = await supabase
+    .from('assessment_results')
+    .select('weak, score, created_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const weakAreas = Array.isArray(latest?.weak) ? latest.weak : []
+  const weakest = weakAreas
+    .filter((a) => a && typeof a.area === 'string')
+    .sort((a, b) => Number(a.mastery ?? 0) - Number(b.mastery ?? 0))[0]
+
+  if (weakest) {
+    return {
+      subject: 'Needs revision',
+      title: String(weakest.area),
+      reason: `You scored ${latest?.score ?? 0}% last time, and this concept was the weakest. Revisiting it first will make the next lesson easier.`,
+      minutes: 15,
+    }
+  }
+
+  // 2. Something started but not finished.
+  const { data: unfinished } = await supabase
+    .from('lesson_progress')
+    .select('progress_percentage, lessons(title)')
+    .eq('user_id', user.id)
+    .neq('status', 'completed')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const title = (unfinished as { lessons?: { title?: string } } | null)?.lessons?.title
+  if (title) {
+    return {
+      subject: 'Continue where you left off',
+      title,
+      reason: `You are ${unfinished?.progress_percentage ?? 0}% through this lesson.`,
+      minutes: 20,
+    }
+  }
+
+  return fallback
 }
 
 async function getConceptsMastered() {

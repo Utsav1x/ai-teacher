@@ -22,7 +22,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LinkButton } from '@/components/ui/link-button'
 import { PageHeader } from '@/components/app/page-header'
-import { MockTeacherEngine, type TeacherLesson, type LessonContinuation, type TeacherLessonId } from '@/lib/teacher-engine'
+import type { AILesson, AIQuestion } from '@/lib/ai/types'
+
+/** Written by /lesson-plan and the classroom — the lesson the student just sat. */
+const LESSON_CACHE_KEY = 'lumina_active_lesson'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,29 +58,38 @@ export default function AssessmentPage() {
 
 function AssessmentContent() {
   const searchParams = useSearchParams()
-  const lessonIdParam = (searchParams.get('lessonId') ?? 'ai-teacher-demo-lesson-1') as TeacherLessonId
 
-  const engine = useMemo(() => new MockTeacherEngine(), [])
-  const [lesson, setLesson] = useState<TeacherLesson | null>(null)
+  const [lesson, setLesson] = useState<AILesson | null>(null)
+  const [noLesson, setNoLesson] = useState(false)
 
+  /**
+   * The assessment covers the lesson the student actually sat, read from the
+   * cache the classroom writes. Previously this served a hardcoded quiz, so a
+   * student who had just finished a Hindi photosynthesis lesson was tested on
+   * neural networks.
+   */
   useEffect(() => {
-    let cancelled = false
-
-    async function loadLesson() {
-      try {
-        const loadedLesson = await engine.getLessonById(lessonIdParam)
-        if (!cancelled) setLesson(loadedLesson)
-      } catch (error) {
-        if (cancelled) return
-
-        setLoadError('The mock assessment could not be loaded. Please refresh and try again.')
-        setLesson(await new MockTeacherEngine().getLessonById(lessonIdParam))
+    try {
+      const raw = sessionStorage.getItem(LESSON_CACHE_KEY)
+      if (!raw) {
+        setNoLesson(true)
+        return
       }
+      const parsed = JSON.parse(raw) as { lesson?: AILesson }
+      if (parsed.lesson?.title) setLesson(parsed.lesson)
+      else setNoLesson(true)
+    } catch {
+      setNoLesson(true)
     }
+  }, [])
 
-    void loadLesson()
-    return () => { cancelled = true }
-  }, [engine, lessonIdParam])
+  /** Every checkpoint from the lesson becomes an assessment question. */
+  const questions: AIQuestion[] = useMemo(() => {
+    if (!lesson) return []
+    return lesson.questions?.length ? lesson.questions : [lesson.question]
+  }, [lesson])
+
+  const lessonIdParam = lesson?.id ?? searchParams.get('lessonId') ?? 'lesson'
 
   // Assessment state
   const [stage,             setStage]             = useState<'intro' | 'quiz' | 'report'>('intro')
@@ -96,11 +108,9 @@ function AssessmentContent() {
     { label: 'Learning report', done: stage === 'report' },
   ]
 
-  // Quiz is a single question (the lesson's checkpoint question)
-  const questionId  = `${lessonIdParam}-q1`
-  const picked      = answers[questionId]
-  const isAnswered  = picked !== undefined
-  const isCorrect   = picked === lesson?.question?.correctIndex
+  const questionIdFor = (index: number) => `${lessonIdParam}-q${index + 1}`
+  const answeredCount = questions.filter((_, i) => answers[questionIdFor(i)] !== undefined).length
+  const allAnswered = questions.length > 0 && answeredCount === questions.length
 
   // ── Load previous result on mount ──
   useEffect(() => {
@@ -122,7 +132,7 @@ function AssessmentContent() {
 
   // ── Submit and save ──
   const handleFinish = useCallback(async () => {
-    if (!isAnswered) return
+    if (!allAnswered) return
     setSaving(true)
     setLoadError(null)
 
@@ -133,9 +143,15 @@ function AssessmentContent() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          lessonId:           lessonIdParam,
-          answers:            [{ questionId, selectedIndex: picked }],
-          timeSpentSeconds:   elapsed,
+          lessonId:         lessonIdParam,
+          lessonTitle:      lesson?.title,
+          answers: questions.map((q, i) => ({
+            questionId: questionIdFor(i),
+            selectedIndex: answers[questionIdFor(i)],
+            correctIndex: q.correctIndex,
+            concept: q.concept,
+          })),
+          timeSpentSeconds: elapsed,
         }),
       })
       const data = await res.json() as ReportData & { error?: string }
@@ -150,7 +166,7 @@ function AssessmentContent() {
     } finally {
       setSaving(false)
     }
-  }, [isAnswered, lessonIdParam, picked, questionId])
+  }, [allAnswered, answers, lesson?.title, lessonIdParam, questions])
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -250,77 +266,95 @@ function AssessmentContent() {
             <CardContent className="flex items-center justify-between p-5">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Assessment progress</p>
-                <p className="mt-1 text-2xl font-semibold">{isAnswered ? '1/1' : '0/1'}</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {answeredCount}/{questions.length}
+                </p>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CircleDashed className="size-4 text-primary" />
-                {isAnswered ? '0 remaining' : '1 remaining'}
+                {questions.length - answeredCount} remaining
               </div>
             </CardContent>
           </Card>
 
-          {/* Question card */}
-          <Card>
-            <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
-              <div className="flex items-start justify-between gap-3">
-                <p className="font-medium leading-snug">
-                  <span className="mr-2 text-muted-foreground">1.</span>
-                  {lesson.question.prompt}
-                </p>
-                {isAnswered && (
-                  isCorrect
-                    ? <CheckCircle2 className="size-5 shrink-0 text-success" />
-                    : <XCircle className="size-5 shrink-0 text-destructive" />
-                )}
-              </div>
+          {/* One card per generated checkpoint */}
+          {questions.map((question, qIndex) => {
+            const qId = questionIdFor(qIndex)
+            const picked = answers[qId]
+            const isAnswered = picked !== undefined
+            const isCorrect = picked === question.correctIndex
 
-              <div className="grid gap-2 sm:grid-cols-2">
-                {lesson.question.options?.map((opt: string, i: number) => {
-                  const isPicked      = picked === i
-                  const showCorrect   = isAnswered && i === lesson.question.correctIndex
-                  const showWrong     = isAnswered && isPicked && !showCorrect
-                  return (
-                    <button
-                      key={opt}
-                      type="button"
-                      disabled={isAnswered}
-                      onClick={() => setAnswers({ [questionId]: i })}
-                      className={cn(
-                        'flex items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors',
-                        'border-border bg-secondary/30',
-                        !isAnswered && 'hover:border-primary/40',
-                        showCorrect && 'border-success/60 bg-success/10',
-                        showWrong   && 'border-destructive/60 bg-destructive/10',
-                        isAnswered && !showCorrect && !showWrong && 'opacity-50',
+            return (
+              <Card key={qId}>
+                <CardContent className="flex flex-col gap-4 p-5 sm:p-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-medium leading-snug">
+                      <span className="mr-2 text-muted-foreground">{qIndex + 1}.</span>
+                      {question.prompt}
+                    </p>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {question.difficulty && (
+                        <Badge variant="secondary" className="rounded-full text-[10px] uppercase">
+                          {question.difficulty}
+                        </Badge>
                       )}
-                    >
-                      <span className={cn(
-                        'flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium',
-                        showCorrect ? 'border-success bg-success text-success-foreground'
-                          : showWrong ? 'border-destructive bg-destructive text-destructive-foreground'
-                          : 'border-border text-muted-foreground',
-                      )}>
-                        {String.fromCharCode(65 + i)}
-                      </span>
-                      {opt}
-                    </button>
-                  )
-                })}
-              </div>
+                      {isAnswered && (
+                        isCorrect
+                          ? <CheckCircle2 className="size-5 text-success" />
+                          : <XCircle className="size-5 text-destructive" />
+                      )}
+                    </div>
+                  </div>
 
-              {isAnswered && (
-                <div className={cn(
-                  'rounded-xl border p-4 text-sm leading-relaxed',
-                  isCorrect ? 'border-success/30 bg-success/10' : 'border-warning/30 bg-warning/10',
-                )}>
-                  <p className="mb-1 font-medium">{isCorrect ? 'Correct!' : 'Not quite.'}</p>
-                  {lesson.question.explanation}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {question.options?.map((opt: string, i: number) => {
+                      const isPicked    = picked === i
+                      const showCorrect = isAnswered && i === question.correctIndex
+                      const showWrong   = isAnswered && isPicked && !showCorrect
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          disabled={isAnswered}
+                          onClick={() => setAnswers((prev) => ({ ...prev, [qId]: i }))}
+                          className={cn(
+                            'flex items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors',
+                            'border-border bg-secondary/30',
+                            !isAnswered && 'hover:border-primary/40',
+                            showCorrect && 'border-success/60 bg-success/10',
+                            showWrong   && 'border-destructive/60 bg-destructive/10',
+                            isAnswered && !showCorrect && !showWrong && 'opacity-50',
+                          )}
+                        >
+                          <span className={cn(
+                            'flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium',
+                            showCorrect ? 'border-success bg-success text-success-foreground'
+                              : showWrong ? 'border-destructive bg-destructive text-destructive-foreground'
+                              : 'border-border text-muted-foreground',
+                          )}>
+                            {String.fromCharCode(65 + i)}
+                          </span>
+                          {opt}
+                        </button>
+                      )
+                    })}
+                  </div>
 
-          {isAnswered && (
+                  {isAnswered && (
+                    <div className={cn(
+                      'rounded-xl border p-4 text-sm leading-relaxed',
+                      isCorrect ? 'border-success/30 bg-success/10' : 'border-warning/30 bg-warning/10',
+                    )}>
+                      <p className="mb-1 font-medium">{isCorrect ? 'Correct!' : 'Not quite.'}</p>
+                      {question.explanation}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })}
+
+          {allAnswered && (
             <button
               type="button"
               disabled={saving}
@@ -336,7 +370,7 @@ function AssessmentContent() {
 
       {/* ── REPORT ── */}
       {stage === 'report' && report && (
-        <ReportView report={report} lessonId={lessonIdParam} engine={engine} />
+        <ReportView report={report} nextTopic={lesson?.nextTopicSuggestion} />
       )}
     </div>
   )
@@ -346,27 +380,12 @@ function AssessmentContent() {
 
 function ReportView({
   report,
-  lessonId,
-  engine,
+  nextTopic,
 }: {
   report: ReportData
-  lessonId: string
-  engine: any
+  /** Comes from the generated lesson, not a fixed curriculum. */
+  nextTopic?: string
 }) {
-  const [continuation, setContinuation] = useState<LessonContinuation | null>(null)
-  const [nextLesson, setNextLesson] = useState<TeacherLesson | null>(null)
-
-  useEffect(() => {
-    async function load() {
-      const cont = await engine.continueLesson(lessonId)
-      setContinuation(cont)
-      if (cont.nextLessonId) {
-        setNextLesson(await engine.getLessonById(cont.nextLessonId))
-      }
-    }
-    load()
-  }, [engine, lessonId])
-
   const hasWeak = report.weak.length > 0
 
   return (
@@ -485,8 +504,8 @@ function ReportView({
         </Card>
       )}
 
-      {/* Next topic suggestion */}
-      {nextLesson && (
+      {/* Next topic suggestion — from the lesson the AI just generated */}
+      {nextTopic && (
         <Card>
           <CardContent className="flex flex-col gap-4 p-5">
             <div className="flex items-center gap-2">
@@ -494,8 +513,10 @@ function ReportView({
               <h2 className="font-semibold">Suggested next topic</h2>
             </div>
             <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
-              <p className="text-lg font-semibold">{nextLesson.title}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{nextLesson.objective}</p>
+              <p className="text-lg font-semibold">{nextTopic}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Maya suggested this as the natural next step after this lesson.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -516,7 +537,7 @@ function ReportView({
             </LinkButton>
           )}
           <LinkButton
-            href={nextLesson && continuation?.nextLessonId ? `/classroom?lessonId=${continuation.nextLessonId}` : '/classroom'}
+            href="/start"
             size="lg"
             variant={hasWeak ? 'outline' : undefined}
             className={cn('h-11 gap-2 px-5', !hasWeak && 'bg-gradient-to-r from-primary to-accent text-primary-foreground')}
