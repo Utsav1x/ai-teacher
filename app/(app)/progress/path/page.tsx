@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LinkButton } from '@/components/ui/link-button'
 import { PageHeader } from '@/components/app/page-header'
+import { StartTopicButton } from '@/components/app/start-topic-button'
 import { auth } from '@/auth'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
@@ -37,7 +38,12 @@ type PathCourse = {
   lessons: PathLesson[]
 }
 
-// Maps lesson DB titles → engine key (classroom URL param)
+/**
+ * Engine keys for the two seeded demo lessons.
+ *
+ * Only these have a fixed key. Generated lessons are identified by title —
+ * `engineKey` stays null for them, and they open by topic instead.
+ */
 const TITLE_TO_ENGINE_KEY: Record<string, string> = {
   'Introduction to Neural Networks': 'ai-teacher-demo-lesson-1',
   'How Neural Networks Learn':       'ai-teacher-demo-lesson-2',
@@ -173,7 +179,7 @@ export default async function LearningPathPage() {
                 Start your first lesson and it will appear here automatically.
               </p>
             </div>
-            <LinkButton href="/classroom" size="lg" className="h-11 gap-2 bg-gradient-to-r from-primary to-accent px-5 text-primary-foreground">
+            <LinkButton href="/start" size="lg" className="h-11 gap-2 bg-gradient-to-r from-primary to-accent px-5 text-primary-foreground">
               <Play className="size-4" />
               Start learning
             </LinkButton>
@@ -324,38 +330,30 @@ export default async function LearningPathPage() {
                         </div>
 
                         <div className="shrink-0">
-                          {isDone && (
-                            <LinkButton
-                              href={classroomHref(lesson.engineKey)}
-                              variant="outline"
-                              size="lg"
-                              className="h-9 gap-1.5"
-                            >
-                              <Play className="size-4" />
-                              Review
-                            </LinkButton>
-                          )}
-                          {isCurrent && (
-                            <LinkButton
-                              href={classroomHref(lesson.engineKey)}
-                              variant="outline"
-                              size="lg"
-                              className="h-9 gap-1.5"
-                            >
-                              <Play className="size-4" />
-                              Resume
-                            </LinkButton>
-                          )}
-                          {lesson.status === 'not_started' && !isLocked && (
-                            <LinkButton
-                              href={classroomHref(lesson.engineKey)}
-                              variant="outline"
-                              size="lg"
-                              className="h-9 gap-1.5"
-                            >
-                              Start
-                            </LinkButton>
-                          )}
+                          {(isDone || isCurrent || (lesson.status === 'not_started' && !isLocked)) &&
+                            (lesson.engineKey ? (
+                              // A seeded demo lesson — addressable by its engine key.
+                              <LinkButton
+                                href={classroomHref(lesson.engineKey)}
+                                variant="outline"
+                                size="lg"
+                                className="h-9 gap-1.5"
+                              >
+                                <Play className="size-4" />
+                                {isDone ? 'Review' : isCurrent ? 'Resume' : 'Start'}
+                              </LinkButton>
+                            ) : (
+                              // A generated lesson. It has no fixed key, so it opens by
+                              // topic — otherwise every one of these would land on the
+                              // classroom's cached lesson rather than this one.
+                              <StartTopicButton
+                                topic={lesson.title}
+                                className="h-9 border border-border bg-transparent text-foreground hover:bg-secondary/60"
+                              >
+                                <Play className="size-4" />
+                                {isDone ? 'Review' : isCurrent ? 'Resume' : 'Start'}
+                              </StartTopicButton>
+                            ))}
                         </div>
                       </CardContent>
                     </Card>

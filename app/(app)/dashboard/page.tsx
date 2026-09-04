@@ -15,6 +15,7 @@ import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { LinkButton } from '@/components/ui/link-button'
 import { PageHeader } from '@/components/app/page-header'
+import { StartTopicButton } from '@/components/app/start-topic-button'
 import { auth } from '@/auth'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
@@ -23,8 +24,8 @@ export const dynamic = 'force-dynamic'
 export default async function DashboardPage() {
   const session = await auth()
   const firstName = session?.user?.name?.split(' ')[0] ?? 'there'
-  const [demoCourse, completedLessons, averageAssessment, studyStreak, conceptsMastered, weeklyGoal] = await Promise.all([
-    getDemoCourse(),
+  const [currentCourse, completedLessons, averageAssessment, studyStreak, conceptsMastered, weeklyGoal] = await Promise.all([
+    getCurrentCourse(),
     getCompletedLessonCount(),
     getAverageAssessment(),
     getStudyStreak(),
@@ -117,7 +118,7 @@ export default async function DashboardPage() {
               <ArrowRight className="size-4" />
             </Link>
           </div>
-          {demoCourse ? (
+          {currentCourse ? (
             <Card className="transition-colors hover:border-primary/40">
               <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
                 <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary">
@@ -125,16 +126,18 @@ export default async function DashboardPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">Demo path</Badge>
+                    <Badge variant="outline">
+                      {currentCourse.isDefault ? 'Demo path' : 'Your lessons'}
+                    </Badge>
                     <span className="text-xs text-muted-foreground">
-                      {demoCourse.completedLessons}/{demoCourse.totalLessons} lessons
+                      {currentCourse.completedLessons}/{currentCourse.totalLessons} lessons
                     </span>
                   </div>
-                  <h3 className="mt-2 truncate font-medium">{demoCourse.title}</h3>
+                  <h3 className="mt-2 truncate font-medium">{currentCourse.title}</h3>
                   <div className="mt-3 flex items-center gap-3">
-                    <Progress value={demoCourse.progress} className="h-1.5" />
+                    <Progress value={currentCourse.progress} className="h-1.5" />
                     <span className="w-10 shrink-0 text-right text-xs font-medium text-muted-foreground">
-                      {demoCourse.progress}%
+                      {currentCourse.progress}%
                     </span>
                   </div>
                 </div>
@@ -151,8 +154,14 @@ export default async function DashboardPage() {
             </Card>
           ) : (
             <Card>
-              <CardContent className="p-5 text-sm text-muted-foreground">
-                Your demo learning path will appear here once your profile is ready.
+              <CardContent className="flex flex-col items-start gap-3 p-5">
+                <p className="text-sm text-muted-foreground">
+                  No lessons yet. Start one and it will appear here with your progress.
+                </p>
+                <LinkButton href="/start" size="sm" className="gap-1.5">
+                  <Play className="size-3.5" />
+                  Start your first lesson
+                </LinkButton>
               </CardContent>
             </Card>
           )}
@@ -179,13 +188,11 @@ export default async function DashboardPage() {
                 <Clock className="size-4" />
                 {recommendedTopic.minutes} min lesson
               </div>
-              <LinkButton
-                href="/lesson-plan"
-                className="mt-1 w-full justify-center gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground"
-              >
-                <Play className="size-4" />
-                Start lesson
-              </LinkButton>
+              <StartTopicButton
+                topic={recommendedTopic.title}
+                minutes={recommendedTopic.minutes}
+                className="mt-1 w-full justify-center bg-gradient-to-r from-primary to-accent text-primary-foreground"
+              />
             </CardContent>
           </Card>
 
@@ -210,7 +217,15 @@ export default async function DashboardPage() {
   )
 }
 
-async function getDemoCourse() {
+/**
+ * The course to surface on the dashboard.
+ *
+ * Prefers the learner's own generated lessons over the seeded demo path — the
+ * previous version required `is_default`, so it could only ever show the demo
+ * and returned nothing at all for a learner who had only ever taken generated
+ * lessons.
+ */
+async function getCurrentCourse() {
   const supabase = await createSupabaseServerClient()
   if (!supabase) return null
 
@@ -229,26 +244,26 @@ async function getDemoCourse() {
       )
     `)
     .eq('user_id', user.id)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
 
-  const courseData = data?.courses as unknown as {
+  type CourseShape = {
     title: string
     is_default: boolean
     lessons: Array<{
       lesson_progress: Array<{ status: string; progress_percentage: number }>
     }>
-  } | Array<{
-    title: string
-    is_default: boolean
-    lessons: Array<{
-      lesson_progress: Array<{ status: string; progress_percentage: number }>
-    }>
-  }> | null
-  const course = Array.isArray(courseData) ? courseData[0] : courseData
+  }
 
-  if (!course?.is_default || course.lessons.length === 0) return null
+  const courses = (data ?? [])
+    .map((row) => {
+      const c = row.courses as unknown as CourseShape | CourseShape[] | null
+      return Array.isArray(c) ? c[0] : c
+    })
+    .filter((c): c is CourseShape => !!c && (c.lessons?.length ?? 0) > 0)
+
+  if (courses.length === 0) return null
+
+  // A learner's own lessons matter more than the demo path.
+  const course = courses.find((c) => !c.is_default) ?? courses[0]!
 
   const totalLessons = course.lessons.length
   const completedLessons = course.lessons.filter((lesson) =>
@@ -261,6 +276,7 @@ async function getDemoCourse() {
 
   return {
     title: course.title,
+    isDefault: course.is_default,
     totalLessons,
     completedLessons,
     progress: Math.round(totalProgress / totalLessons),
