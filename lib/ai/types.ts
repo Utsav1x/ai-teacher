@@ -55,6 +55,32 @@ export interface GenerateLessonRequest {
  */
 export type QuestionDifficulty = 'easy' | 'core' | 'stretch'
 
+/**
+ * The form of visual a topic calls for.
+ *
+ * Mathematics wants equations and worked steps; physics wants labelled
+ * diagrams; history wants timelines; programming wants runnable code and its
+ * output. Declaring the choice as data — rather than letting it fall out of
+ * free-form text — means the UI can render each form appropriately and the
+ * reasoning behind it can be shown to the learner.
+ */
+export type VisualType =
+  | 'code'      // programming — snippet plus expected output
+  | 'formula'   // mathematics, physics — equations and derivation steps
+  | 'diagram'   // structures, processes, architecture, labelled parts
+  | 'timeline'  // history, ordered events, sequences
+  | 'table'     // comparisons, classifications, properties
+  | 'graph'     // plotted relationships, trends, distributions
+
+export const VISUAL_TYPES: VisualType[] = [
+  'code',
+  'formula',
+  'diagram',
+  'timeline',
+  'table',
+  'graph',
+]
+
 export interface AIQuestion {
   /** Whether it's an MCQ or open-ended question. */
   type: 'MCQ' | 'Freeform'
@@ -111,6 +137,14 @@ export interface AILesson {
    * ASCII diagram, formula, or table relevant to the teaching phase.
    */
   visualPayload?: string
+  /**
+   * Which form of visual the subject calls for. The model chooses this itself
+   * from the topic, so the choice is explicit and inspectable rather than an
+   * accident of whatever it happened to emit.
+   */
+  visualType?: VisualType
+  /** One sentence on why that form suits this topic. Shown to the learner. */
+  visualRationale?: string
   /** Ordered list of lesson sections for the progress panel. */
   sections: AILessonSection[]
   /**

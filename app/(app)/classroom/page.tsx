@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { TeacherAvatar } from '@/components/app/teacher-avatar'
 import { LessonVideoButton } from '@/components/app/lesson-video-button'
+import { LessonVisual } from '@/components/app/lesson-visual'
 import { useSpeech } from '@/lib/speech/use-speech'
 import type {
   AIEvaluation,
@@ -906,16 +907,12 @@ export default function ClassroomPage() {
                     </div>
 
                     {lessonVisual && (
-                      <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60">
-                        {lessonVisual.language && (
-                          <div className="border-b border-white/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                            {lessonVisual.language}
-                          </div>
-                        )}
-                        <pre className="overflow-x-auto p-4 text-xs leading-relaxed text-cyan-100">
-                          {lessonVisual.body}
-                        </pre>
-                      </div>
+                      <LessonVisual
+                        body={lessonVisual.body}
+                        language={lessonVisual.language}
+                        visualType={lesson.visualType}
+                        rationale={lesson.visualRationale}
+                      />
                     )}
 
                     <div className="grid gap-3 sm:grid-cols-3">

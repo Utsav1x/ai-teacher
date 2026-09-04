@@ -22,6 +22,8 @@ export interface LessonVideoSegment {
   narration: string
   keyPoints?: string[]
   visual?: string
+  /** The form the model chose for this visual, e.g. "Diagram". */
+  visualLabel?: string
 }
 
 export interface RecordOptions {
@@ -489,6 +491,7 @@ export async function recordLessonVideo(options: RecordOptions): Promise<RecordR
       frame.kind = segment.kind
       frame.keyPoints = segment.keyPoints ?? []
       frame.visual = segment.visual
+      frame.visualLabel = segment.visualLabel
 
       for (const caption of toCaptions(segment.narration)) {
         if (signal?.aborted) break

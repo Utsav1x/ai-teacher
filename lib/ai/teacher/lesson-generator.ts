@@ -18,7 +18,7 @@ import {
   buildLessonUserPrompt,
 } from './prompts'
 import { retrieveRelevantChunks, formatChunksAsContext } from '../rag/retriever'
-import type { AIQuestion } from '../types'
+import { VISUAL_TYPES, type AIQuestion, type VisualType } from '../types'
 
 /**
  * Generate a complete lesson for the given request.
@@ -158,6 +158,10 @@ function validateLesson(raw: unknown): AILesson {
     keyPoints: ensureStringArray(obj.keyPoints, 3),
     teachingPrompt: String(obj.teachingPrompt),
     visualPayload: obj.visualPayload ? String(obj.visualPayload) : undefined,
+    visualType: VISUAL_TYPES.includes(obj.visualType as VisualType)
+      ? (obj.visualType as VisualType)
+      : undefined,
+    visualRationale: obj.visualRationale ? String(obj.visualRationale) : undefined,
     sections: ensureSections(obj.sections),
     question: headline ?? {
       type: qType,
