@@ -40,6 +40,44 @@ export interface GenerateLessonRequest {
   lessonIndex?: number
   /** Titles of previously taught lessons — for curriculum continuity. */
   previousTopics?: string[]
+  /**
+   * Concepts the student answered incorrectly earlier in the session. The
+   * generator is told to revisit these rather than assuming they landed.
+   */
+  weakConcepts?: string[]
+}
+
+/**
+ * How demanding a checkpoint is. The classroom moves along this scale in
+ * response to the student's answers — down after a mistake, up after a
+ * confident correct answer — which is what makes the lesson adaptive rather
+ * than a fixed quiz.
+ */
+export type QuestionDifficulty = 'easy' | 'core' | 'stretch'
+
+export interface AIQuestion {
+  /** Whether it's an MCQ or open-ended question. */
+  type: 'MCQ' | 'Freeform'
+  prompt: string
+  /** Only present if type === 'MCQ' */
+  options?: string[]
+  /** Only present if type === 'MCQ'. 0-3 index. */
+  correctIndex?: number
+  /** Only present if type === 'Freeform'. What the AI expects in a correct answer. */
+  expectedAnswer?: string
+  /** Why the correct answer is right. */
+  explanation: string
+  /** Maya's intro to the question. */
+  teacherPrompt: string
+  /** Optional visual for question phase. */
+  visualPayload?: string
+  /** Where this question sits on the difficulty scale. */
+  difficulty?: QuestionDifficulty
+  /**
+   * The specific concept under test, in a few words. Getting this wrong marks
+   * the concept weak, which steers both the rest of the lesson and the next one.
+   */
+  concept?: string
 }
 
 /** One step in the lesson plan sidebar. */
@@ -75,24 +113,17 @@ export interface AILesson {
   visualPayload?: string
   /** Ordered list of lesson sections for the progress panel. */
   sections: AILessonSection[]
-  /** The checkpoint question. */
-  question: {
-    /** Whether it's an MCQ or open-ended question. */
-    type: 'MCQ' | 'Freeform'
-    prompt: string
-    /** Only present if type === 'MCQ' */
-    options?: string[]
-    /** Only present if type === 'MCQ'. 0-3 index. */
-    correctIndex?: number
-    /** Only present if type === 'Freeform'. What the AI expects in a correct freeform answer. */
-    expectedAnswer?: string
-    /** Why the correct answer is right. */
-    explanation: string
-    /** Maya's intro to the question. */
-    teacherPrompt: string
-    /** Optional visual for question phase. */
-    visualPayload?: string
-  }
+  /**
+   * The first checkpoint question. Retained so a lesson generated before
+   * `questions` existed still runs.
+   */
+  question: AIQuestion
+  /**
+   * Graded checkpoints for the lesson, one per difficulty. The classroom picks
+   * which to ask next from the student's running performance rather than
+   * walking them in order.
+   */
+  questions?: AIQuestion[]
   /**
    * Re-explanation using a DIFFERENT analogy — shown when student answers wrong.
    */

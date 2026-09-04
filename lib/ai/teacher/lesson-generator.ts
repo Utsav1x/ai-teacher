@@ -18,6 +18,7 @@ import {
   buildLessonUserPrompt,
 } from './prompts'
 import { retrieveRelevantChunks, formatChunksAsContext } from '../rag/retriever'
+import type { AIQuestion } from '../types'
 
 /**
  * Generate a complete lesson for the given request.
@@ -38,6 +39,7 @@ export async function generateLesson(
     userId,
     lessonIndex = 0,
     previousTopics = [],
+    weakConcepts = [],
   } = request
 
   // ── Step 1: RAG retrieval (skip if no materials or no userId) ──────────────
@@ -67,6 +69,7 @@ export async function generateLesson(
     ragContext,
     previousTopics,
     lessonIndex,
+    weakConcepts,
   })
 
   // ── Step 3: Call LLM in JSON mode ─────────────────────────────────────────
@@ -106,6 +109,18 @@ function validateLesson(raw: unknown): AILesson {
 
   const obj = raw as Record<string, unknown>
 
+  // The prompt now asks for a graded `questions` array. Older cached lessons —
+  // and any response where the model reverts to the previous shape — still have
+  // a single `question`, so accept either and normalise to both.
+  const rawQuestions = Array.isArray(obj.questions) ? (obj.questions as unknown[]) : []
+  if (!obj.question && rawQuestions.length > 0) {
+    // Prefer the core question as the lesson's headline checkpoint.
+    obj.question =
+      rawQuestions.find(
+        (q) => (q as Record<string, unknown>)?.difficulty === 'core',
+      ) ?? rawQuestions[0]
+  }
+
   // Required field check
   const required = [
     'title', 'subtitle', 'objective', 'summary', 'keyPoints',
@@ -126,9 +141,14 @@ function validateLesson(raw: unknown): AILesson {
     }
   }
 
-  const qType = (question.type === 'Freeform' ? 'Freeform' : 'MCQ')
+  const normalisedQuestions = rawQuestions
+    .map((q) => normaliseQuestion(q))
+    .filter((q): q is AIQuestion => q !== null)
 
   // Build the validated AILesson object with safe defaults
+  const headline = normaliseQuestion(question)
+  const qType = headline?.type ?? 'MCQ'
+
   return {
     id: String(obj.id ?? `lesson-${Date.now()}`),
     title: String(obj.title),
@@ -139,19 +159,42 @@ function validateLesson(raw: unknown): AILesson {
     teachingPrompt: String(obj.teachingPrompt),
     visualPayload: obj.visualPayload ? String(obj.visualPayload) : undefined,
     sections: ensureSections(obj.sections),
-    question: {
+    question: headline ?? {
       type: qType,
       prompt: String(question.prompt),
-      options: qType === 'MCQ' ? ensureStringArray(question.options, 4) : undefined,
-      correctIndex: qType === 'MCQ' ? Math.max(0, Math.min(3, Number(question.correctIndex) || 0)) : undefined,
-      expectedAnswer: qType === 'Freeform' ? String(question.expectedAnswer || '') : undefined,
       explanation: String(question.explanation),
       teacherPrompt: String(question.teacherPrompt),
-      visualPayload: question.visualPayload ? String(question.visualPayload) : undefined,
     },
+    questions: normalisedQuestions.length > 0 ? normalisedQuestions : undefined,
     reexplanation: String(obj.reexplanation),
     completionMessage: String(obj.completionMessage),
     nextTopicSuggestion: obj.nextTopicSuggestion ? String(obj.nextTopicSuggestion) : undefined,
+  }
+}
+
+/** Coerces one raw question object into AIQuestion, or null if unusable. */
+function normaliseQuestion(value: unknown): AIQuestion | null {
+  if (!value || typeof value !== 'object') return null
+  const q = value as Record<string, unknown>
+
+  if (!q.prompt || !q.explanation) return null
+
+  const type = q.type === 'Freeform' ? 'Freeform' : 'MCQ'
+  const difficulty =
+    q.difficulty === 'easy' || q.difficulty === 'stretch' ? q.difficulty : 'core'
+
+  return {
+    type,
+    prompt: String(q.prompt),
+    options: type === 'MCQ' ? ensureStringArray(q.options, 4) : undefined,
+    correctIndex:
+      type === 'MCQ' ? Math.max(0, Math.min(3, Number(q.correctIndex) || 0)) : undefined,
+    expectedAnswer: type === 'Freeform' ? String(q.expectedAnswer ?? '') : undefined,
+    explanation: String(q.explanation),
+    teacherPrompt: String(q.teacherPrompt ?? 'Let me check your understanding.'),
+    visualPayload: q.visualPayload ? String(q.visualPayload) : undefined,
+    difficulty,
+    concept: q.concept ? String(q.concept) : undefined,
   }
 }
 

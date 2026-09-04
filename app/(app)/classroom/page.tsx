@@ -27,7 +27,39 @@ import { Progress } from '@/components/ui/progress'
 import { TeacherAvatar } from '@/components/app/teacher-avatar'
 import { LessonVideoButton } from '@/components/app/lesson-video-button'
 import { useSpeech } from '@/lib/speech/use-speech'
-import type { AIEvaluation, AILesson, ChatTurn, LearnerPreferences } from '@/lib/ai/types'
+import type {
+  AIEvaluation,
+  AILesson,
+  AIQuestion,
+  ChatTurn,
+  LearnerPreferences,
+  QuestionDifficulty,
+} from '@/lib/ai/types'
+
+/** One answered checkpoint, kept to drive difficulty and the weak-concept list. */
+type AnsweredCheckpoint = {
+  difficulty: QuestionDifficulty
+  concept?: string
+  correct: boolean
+}
+
+const DIFFICULTY_ORDER: QuestionDifficulty[] = ['easy', 'core', 'stretch']
+
+/** Down a step after a mistake, up a step after a correct answer. */
+function nextDifficulty(
+  current: QuestionDifficulty,
+  correct: boolean,
+): QuestionDifficulty {
+  const i = DIFFICULTY_ORDER.indexOf(current)
+  const target = correct ? i + 1 : i - 1
+  return DIFFICULTY_ORDER[Math.max(0, Math.min(DIFFICULTY_ORDER.length - 1, target))]!
+}
+
+const DIFFICULTY_LABEL: Record<QuestionDifficulty, string> = {
+  easy: 'Warm-up',
+  core: 'Core concept',
+  stretch: 'Application',
+}
 
 type LessonPhase =
   | 'teaching'
@@ -127,6 +159,14 @@ export default function ClassroomPage() {
   const [evalError, setEvalError] = useState('')
   const [sectionIndex, setSectionIndex] = useState(0)
 
+  // ── Adaptive checkpoints ────────────────────────────────────────────────────
+  const [answered, setAnswered] = useState<AnsweredCheckpoint[]>([])
+  const [askedIndexes, setAskedIndexes] = useState<number[]>([])
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const [targetDifficulty, setTargetDifficulty] = useState<QuestionDifficulty>('core')
+  /** Concepts the student got wrong — carried into the next lesson's prompt. */
+  const [weakConcepts, setWeakConcepts] = useState<string[]>([])
+
   const requestRef = useRef(0)
 
   // ── Lesson generation ───────────────────────────────────────────────────────
@@ -137,6 +177,7 @@ export default function ClassroomPage() {
       index: number,
       covered: string[],
       materialIds: string[] = [],
+      struggledWith: string[] = [],
     ) => {
       const requestId = ++requestRef.current
       setLoadState('loading')
@@ -148,6 +189,13 @@ export default function ClassroomPage() {
       setSectionIndex(0)
       setPhase('teaching')
 
+      // A new lesson starts a fresh set of checkpoints, but weak concepts
+      // deliberately persist — they are what the next lesson adapts to.
+      setAnswered([])
+      setAskedIndexes([])
+      setActiveIndex(-1)
+      setTargetDifficulty('core')
+
       try {
         const res = await fetch('/api/teacher/generate-lesson', {
           method: 'POST',
@@ -158,6 +206,7 @@ export default function ClassroomPage() {
             preferences,
             lessonIndex: index,
             previousTopics: covered,
+            weakConcepts: struggledWith,
           }),
         })
 
@@ -225,14 +274,52 @@ export default function ClassroomPage() {
     [lesson?.teachingPrompt],
   )
 
+  /** Every checkpoint available, newest contract first, single-question fallback. */
+  const questionPool: AIQuestion[] = useMemo(() => {
+    if (!lesson) return []
+    if (lesson.questions?.length) return lesson.questions
+    return [lesson.question]
+  }, [lesson])
+
+  const currentQuestion: AIQuestion | null =
+    activeIndex >= 0 ? (questionPool[activeIndex] ?? null) : null
+
   const lessonVisual = useMemo(() => stripFence(lesson?.visualPayload), [lesson?.visualPayload])
   const questionVisual = useMemo(
-    () => stripFence(lesson?.question?.visualPayload),
-    [lesson?.question?.visualPayload],
+    () => stripFence(currentQuestion?.visualPayload),
+    [currentQuestion?.visualPayload],
   )
   const evalVisual = useMemo(() => stripFence(evaluation?.visualPayload), [evaluation?.visualPayload])
 
-  const isMcq = lesson?.question?.type !== 'Freeform' && !!lesson?.question?.options?.length
+  const remainingCount = questionPool.length - askedIndexes.length
+  const correctCount = answered.filter((a) => a.correct).length
+
+  const isMcq =
+    currentQuestion?.type !== 'Freeform' && !!currentQuestion?.options?.length
+
+  /**
+   * Chooses the next checkpoint: the closest unasked question to the target
+   * difficulty. Returns -1 when the student has answered everything.
+   */
+  const pickQuestion = useCallback(
+    (target: QuestionDifficulty): number => {
+      const unasked = questionPool
+        .map((q, i) => ({ q, i }))
+        .filter(({ i }) => !askedIndexes.includes(i))
+
+      if (unasked.length === 0) return -1
+
+      const targetRank = DIFFICULTY_ORDER.indexOf(target)
+      unasked.sort((a, b) => {
+        const ra = DIFFICULTY_ORDER.indexOf(a.q.difficulty ?? 'core')
+        const rb = DIFFICULTY_ORDER.indexOf(b.q.difficulty ?? 'core')
+        return Math.abs(ra - targetRank) - Math.abs(rb - targetRank)
+      })
+
+      return unasked[0]!.i
+    },
+    [questionPool, askedIndexes],
+  )
 
   const statusLabel: Record<LessonPhase, string> = {
     teaching: 'Teaching',
@@ -253,7 +340,9 @@ export default function ClassroomPage() {
       case 'teaching':
         return `${lesson.summary} ${lesson.teachingPrompt}`
       case 'question':
-        return `${lesson.question.teacherPrompt} ${lesson.question.prompt}`
+        return currentQuestion
+          ? `${currentQuestion.teacherPrompt} ${currentQuestion.prompt}`
+          : ''
       case 'reexplaining':
         return evaluation
           ? `${evaluation.feedback} ${evaluation.reexplanation}`
@@ -358,7 +447,17 @@ export default function ClassroomPage() {
   }
 
   function beginQuestion() {
-    setResumePhase(phase)
+    const index = pickQuestion(targetDifficulty)
+    if (index < 0) {
+      // Nothing left to ask — go straight to the wrap-up.
+      setPhase('continuing')
+      return
+    }
+
+    setActiveIndex(index)
+    setAskedIndexes((prev) => [...prev, index])
+    setResponseMode(questionPool[index]?.type === 'Freeform' ? 'freeform' : 'mcq')
+    setResumePhase(phase === 'question' ? 'teaching' : phase)
     setPhase('question')
     setSelected(null)
     setShortAnswer('')
@@ -367,7 +466,7 @@ export default function ClassroomPage() {
   }
 
   async function submitAnswer() {
-    if (!lesson) return
+    if (!lesson || !currentQuestion) return
     if (isMcq && selected === null) return
     if (!isMcq && shortAnswer.trim().length === 0) return
 
@@ -379,16 +478,16 @@ export default function ClassroomPage() {
       lessonObjective: lesson.objective,
       lessonKeyPoints: lesson.keyPoints,
       lessonTeachingPrompt: lesson.teachingPrompt,
-      questionPrompt: lesson.question.prompt,
+      questionPrompt: currentQuestion.prompt,
     }
 
     if (isMcq) {
-      payload.questionOptions = lesson.question.options
-      payload.correctIndex = lesson.question.correctIndex
+      payload.questionOptions = currentQuestion.options
+      payload.correctIndex = currentQuestion.correctIndex
       payload.selectedIndex = selected
       if (shortAnswer.trim()) payload.studentFreeformText = shortAnswer.trim()
     } else {
-      payload.expectedAnswer = lesson.question.expectedAnswer
+      payload.expectedAnswer = currentQuestion.expectedAnswer
       payload.studentFreeformText = shortAnswer.trim()
     }
 
@@ -409,6 +508,24 @@ export default function ClassroomPage() {
 
       const result = data.evaluation as AIEvaluation
       setEvaluation(result)
+
+      // Record the outcome, move the difficulty target, and remember the
+      // concept if it was missed — this is what makes the next question, and
+      // the next lesson, respond to how the student is actually doing.
+      const difficulty = currentQuestion.difficulty ?? 'core'
+      setAnswered((prev) => [
+        ...prev,
+        { difficulty, concept: currentQuestion.concept, correct: result.isCorrect },
+      ])
+      setTargetDifficulty(nextDifficulty(difficulty, result.isCorrect))
+
+      if (!result.isCorrect) {
+        const missed = currentQuestion.concept ?? result.misunderstandingDetected
+        if (missed) {
+          setWeakConcepts((prev) => (prev.includes(missed) ? prev : [...prev, missed]))
+        }
+      }
+
       setPhase(result.isCorrect ? 'continuing' : 'reexplaining')
     } catch (err) {
       setEvalError(err instanceof Error ? err.message : 'Could not reach the AI teacher.')
@@ -439,6 +556,7 @@ export default function ClassroomPage() {
       lessonIndex + 1,
       covered,
       session.materialIds ?? [],
+      weakConcepts,
     )
   }
 
@@ -725,15 +843,43 @@ export default function ClassroomPage() {
                 )}
 
                 {/* ── Question ─────────────────────────────────────────────── */}
-                {phase === 'question' && (
+                {phase === 'question' && currentQuestion && (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">Question</p>
-                      <Badge className="bg-violet-500/15 text-violet-200">Checkpoint</Badge>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+                        Checkpoint {askedIndexes.length} of {questionPool.length}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {answered.length > 0 && (
+                          <span className="text-xs text-slate-400">
+                            {correctCount}/{answered.length} correct
+                          </span>
+                        )}
+                        <Badge
+                          className={cn(
+                            (currentQuestion.difficulty ?? 'core') === 'easy' &&
+                              'bg-emerald-500/15 text-emerald-200',
+                            (currentQuestion.difficulty ?? 'core') === 'core' &&
+                              'bg-violet-500/15 text-violet-200',
+                            (currentQuestion.difficulty ?? 'core') === 'stretch' &&
+                              'bg-amber-500/15 text-amber-200',
+                          )}
+                        >
+                          {DIFFICULTY_LABEL[currentQuestion.difficulty ?? 'core']}
+                        </Badge>
+                      </div>
                     </div>
 
-                    <p className="text-sm italic text-slate-400">{lesson.question.teacherPrompt}</p>
-                    <p className="text-lg font-medium text-white">{lesson.question.prompt}</p>
+                    {answered.length > 0 && (
+                      <p className="text-xs text-cyan-300/80">
+                        {answered[answered.length - 1]!.correct
+                          ? 'You got the last one — this one goes a step further.'
+                          : 'Stepping back to something more basic first.'}
+                      </p>
+                    )}
+
+                    <p className="text-sm italic text-slate-400">{currentQuestion.teacherPrompt}</p>
+                    <p className="text-lg font-medium text-white">{currentQuestion.prompt}</p>
 
                     {questionVisual && (
                       <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60">
@@ -765,7 +911,7 @@ export default function ClassroomPage() {
 
                     {isMcq && responseMode === 'mcq' ? (
                       <div className="grid gap-2.5">
-                        {lesson.question.options?.map((option, index) => (
+                        {currentQuestion.options?.map((option, index) => (
                           <button
                             key={option}
                             type="button"
@@ -875,13 +1021,23 @@ export default function ClassroomPage() {
                       >
                         Try the question again
                       </Button>
-                      <Button
-                        variant="secondary"
-                        className="border border-white/10 bg-white/5 text-slate-200"
-                        onClick={() => setPhase('continuing')}
-                      >
-                        Continue anyway
-                      </Button>
+                      {remainingCount > 0 ? (
+                        <Button
+                          variant="secondary"
+                          className="border border-white/10 bg-white/5 text-slate-200"
+                          onClick={beginQuestion}
+                        >
+                          Try an easier one
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          className="border border-white/10 bg-white/5 text-slate-200"
+                          onClick={() => setPhase('continuing')}
+                        >
+                          Continue anyway
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -913,8 +1069,41 @@ export default function ClassroomPage() {
                       </div>
                     )}
 
+                    {answered.length > 0 && (
+                      <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                          Checkpoints
+                        </p>
+                        <p className="mt-1 text-sm text-slate-200">
+                          {correctCount} of {answered.length} correct
+                        </p>
+                        {weakConcepts.length > 0 && (
+                          <p className="mt-1.5 text-xs text-amber-200/90">
+                            Needs review: {weakConcepts.join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap items-center gap-3">
-                      <Button className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white" onClick={nextLesson}>
+                      {remainingCount > 0 && (
+                        <Button
+                          className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
+                          onClick={beginQuestion}
+                        >
+                          Next checkpoint
+                          <ChevronRight className="ml-2 size-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant={remainingCount > 0 ? 'secondary' : undefined}
+                        className={
+                          remainingCount > 0
+                            ? 'border border-white/10 bg-white/5 text-slate-200'
+                            : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white'
+                        }
+                        onClick={nextLesson}
+                      >
                         Next lesson
                         <ChevronRight className="ml-2 size-4" />
                       </Button>
