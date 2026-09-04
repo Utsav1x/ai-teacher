@@ -159,6 +159,7 @@ export default function ClassroomPage() {
   const [selected, setSelected] = useState<number | null>(null)
   const [shortAnswer, setShortAnswer] = useState('')
   const [showTranscript, setShowTranscript] = useState(false)
+  const [speechRate, setSpeechRate] = useState(0.95)
   const [showAskPanel, setShowAskPanel] = useState(false)
   const [resumePhase, setResumePhase] = useState<LessonPhase>('teaching')
   const [askDraft, setAskDraft] = useState('')
@@ -401,7 +402,7 @@ export default function ClassroomPage() {
   }
 
   // ── Narration ───────────────────────────────────────────────────────────────
-  const speech = useSpeech(session.preferences.language)
+  const speech = useSpeech(session.preferences.language, speechRate)
 
   /** The full text Maya speaks for the current phase. */
   const narration = useMemo(() => {
@@ -805,6 +806,21 @@ export default function ClassroomPage() {
               </div>
 
               <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+                <label className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-slate-900/60 px-3 text-xs text-slate-300 backdrop-blur-sm">
+                  <span className="sr-only">Narration speed</span>
+                  <select
+                    aria-label="Narration speed"
+                    value={speechRate}
+                    onChange={(event) => setSpeechRate(Number(event.target.value))}
+                    className="bg-transparent text-xs text-slate-200 outline-none"
+                  >
+                    <option value="0.7" className="bg-slate-900">0.7x</option>
+                    <option value="0.85" className="bg-slate-900">0.85x</option>
+                    <option value="0.95" className="bg-slate-900">1x</option>
+                    <option value="1.15" className="bg-slate-900">1.15x</option>
+                    <option value="1.3" className="bg-slate-900">1.3x</option>
+                  </select>
+                </label>
                 <Button
                   size="icon"
                   variant="secondary"

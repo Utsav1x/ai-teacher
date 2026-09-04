@@ -274,7 +274,7 @@ export default function StartLearningPage() {
                 </span>
                 <div>
                   <h2 className="font-semibold">Upload material</h2>
-                  <p className="text-xs text-muted-foreground">PDF, DOCX, or PPTX up to 25 MB</p>
+                  <p className="text-xs text-muted-foreground">PDF, DOCX, PPTX, TXT, or Markdown up to 25 MB</p>
                 </div>
               </div>
 
@@ -306,11 +306,13 @@ export default function StartLearningPage() {
                   <Badge variant="secondary">PDF</Badge>
                   <Badge variant="secondary">DOCX</Badge>
                   <Badge variant="secondary">PPTX</Badge>
+                  <Badge variant="secondary">TXT</Badge>
+                  <Badge variant="secondary">MD</Badge>
                 </div>
                 <input
                   ref={inputRef}
                   type="file"
-                  accept=".pdf,.docx,.pptx"
+                  accept=".pdf,.docx,.pptx,.txt,.md"
                   multiple
                   className="hidden"
                   onChange={(e) => addFiles(e.target.files)}

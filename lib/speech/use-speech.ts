@@ -64,7 +64,7 @@ export interface UseSpeechResult {
   stop: () => void
 }
 
-export function useSpeech(language: string): UseSpeechResult {
+export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
   const [speaking, setSpeaking] = useState(false)
   const [paused, setPaused] = useState(false)
   const [viseme, setViseme] = useState<Viseme>('rest')
@@ -205,7 +205,7 @@ export function useSpeech(language: string): UseSpeechResult {
       const utterance = new SpeechSynthesisUtterance(trimmed)
       if (voice) utterance.voice = voice
       utterance.lang = voice?.lang ?? tag
-      utterance.rate = 0.95 // Slightly under default — this is teaching, not reading.
+      utterance.rate = Math.max(0.6, Math.min(1.4, rate))
       utterance.pitch = 1.05
 
       utterance.onstart = () => {
@@ -256,7 +256,7 @@ export function useSpeech(language: string): UseSpeechResult {
       utteranceRef.current = utterance
       window.speechSynthesis.speak(utterance)
     },
-    [animateWord, clearTimers, clearFallback, clearKeepAlive, startFallbackAnimation, tag, voice],
+    [animateWord, clearTimers, clearFallback, clearKeepAlive, startFallbackAnimation, tag, voice, rate],
   )
 
   const pause = useCallback(() => {

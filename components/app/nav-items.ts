@@ -6,6 +6,7 @@ import {
   BarChart3,
   Waypoints,
   Settings,
+  WandSparkles,
 } from 'lucide-react'
 
 export type NavItem = {
@@ -21,6 +22,7 @@ export const navSections: { title: string; items: NavItem[] }[] = [
       { label: 'Home',           href: '/dashboard',  icon: Home      },
       { label: 'Start Learning', href: '/start',       icon: Sparkles  },
       { label: 'Materials',      href: '/materials',   icon: Library   },
+      { label: 'Feature Studio', href: '/features',    icon: WandSparkles },
     ],
   },
   {
