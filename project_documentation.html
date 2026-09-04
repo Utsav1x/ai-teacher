@@ -1,864 +1,475 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lumina — AI Teacher Platform: Technical Documentation</title>
-  <style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumina — AI Teacher · Project Documentation</title>
+<style>
+  :root {
+    --ground:#F4F5F2; --surface:#FFFFFF; --sunken:#EBEDE8;
+    --ink:#1A1D1A; --ink-mid:#575C55; --ink-soft:#83887F;
+    --accent:#1F6F5C; --accent-soft:#E3EEE9;
+    --signal:#B3541E; --signal-soft:#F7EADF;
+    --rule:#D9DBD4; --rule-soft:#E8EAE3;
+    --serif:Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #090d16;
-      --card-bg: #111827;
-      --card-border: #1f293d;
-      --primary: #38bdf8;
-      --primary-gradient: linear-gradient(135deg, #38bdf8, #818cf8);
-      --accent: #a855f7;
-      --text: #f3f4f6;
-      --text-muted: #9ca3af;
-      --success: #34d399;
-      --warning: #fbbf24;
-      --danger: #f87171;
-      --code-bg: #030712;
-      --highlight-bg: rgba(56, 189, 248, 0.06);
-      --highlight-border: rgba(56, 189, 248, 0.25);
-      --ai-bg: rgba(168, 85, 247, 0.06);
-      --ai-border: rgba(168, 85, 247, 0.3);
+      --ground:#15171B; --surface:#1C1F24; --sunken:#111317;
+      --ink:#E5E8E4; --ink-mid:#A5ABA5; --ink-soft:#7A807A;
+      --accent:#4FBF9B; --accent-soft:#17302A;
+      --signal:#E08B4F; --signal-soft:#2F2219;
+      --rule:#2B2F35; --rule-soft:#23272C;
     }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink);
+         font-family:var(--sans); font-size:15.5px; line-height:1.65; }
+  .wrap { max-width:880px; margin:0 auto; padding:48px 24px 100px; }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+  header.doc { border-bottom:2px solid var(--ink); padding-bottom:24px; }
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+             text-transform:uppercase; color:var(--accent); margin:0 0 10px; }
+  h1 { font-family:var(--serif); font-size:clamp(30px,5vw,42px); line-height:1.1;
+       margin:0 0 12px; letter-spacing:-.01em; }
+  .sub { font-size:17px; color:var(--ink-mid); margin:0; max-width:62ch; }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-      line-height: 1.7;
-      padding: 2rem 1rem;
-    }
+  nav.toc { background:var(--surface); border:1px solid var(--rule); border-radius:4px;
+            padding:18px 22px; margin:28px 0 8px; }
+  nav.toc p { font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+              text-transform:uppercase; color:var(--ink-soft); margin:0 0 10px; }
+  nav.toc ol { margin:0; padding-left:20px; columns:2; column-gap:32px; font-size:14px; }
+  nav.toc li { margin-bottom:4px; break-inside:avoid; }
+  nav.toc a { color:var(--ink-mid); text-decoration:none; }
+  nav.toc a:hover { color:var(--accent); text-decoration:underline; }
 
-    .container { max-width: 1100px; margin: 0 auto; }
+  h2 { font-family:var(--serif); font-size:25px; margin:46px 0 6px;
+       padding-top:16px; border-top:1px solid var(--rule); letter-spacing:-.01em; }
+  h3 { font-size:16px; margin:26px 0 6px; }
+  p { margin:0 0 14px; max-width:70ch; }
+  ul, ol { max-width:70ch; padding-left:22px; }
+  li { margin-bottom:6px; }
+  strong { font-weight:650; }
+  code { font-family:var(--mono); font-size:.87em; background:var(--sunken);
+         padding:1.5px 5px; border-radius:2px; }
+  pre { background:var(--surface); border:1px solid var(--rule); border-radius:4px;
+        padding:14px 16px; overflow-x:auto; font-family:var(--mono);
+        font-size:12.5px; line-height:1.6; }
+  a { color:var(--accent); }
 
-    header {
-      margin-bottom: 3rem;
-      padding-bottom: 1.5rem;
-      border-bottom: 1px solid var(--card-border);
-    }
+  table { width:100%; border-collapse:collapse; font-size:14px;
+          background:var(--surface); border:1px solid var(--rule);
+          border-radius:4px; margin:14px 0; }
+  th { text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:.09em;
+       text-transform:uppercase; color:var(--ink-soft); background:var(--sunken);
+       padding:9px 13px; border-bottom:1px solid var(--rule); }
+  td { padding:9px 13px; border-bottom:1px solid var(--rule-soft); vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  .scroll { overflow-x:auto; }
 
-    .badge {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      background: rgba(56, 189, 248, 0.15);
-      color: var(--primary);
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      margin-bottom: 1rem;
-    }
+  .note { border-left:3px solid var(--signal); background:var(--signal-soft);
+          padding:13px 16px; border-radius:0 4px 4px 0; margin:16px 0; }
+  .note p { margin:0; font-size:14px; max-width:64ch; }
+  .note p + p { margin-top:8px; }
+  .note .tag { font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+               text-transform:uppercase; color:var(--signal); display:block; margin-bottom:5px; }
 
-    .badge-purple {
-      background: rgba(168, 85, 247, 0.15);
-      color: #c084fc;
-      border-color: rgba(168, 85, 247, 0.35);
-    }
-
-    .badge-green {
-      background: rgba(52, 211, 153, 0.15);
-      color: var(--success);
-      border-color: rgba(52, 211, 153, 0.3);
-    }
-
-    h1 {
-      font-size: 2.5rem;
-      font-weight: 800;
-      letter-spacing: -0.025em;
-      background: var(--primary-gradient);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 0.5rem;
-    }
-
-    .subtitle { font-size: 1.125rem; color: var(--text-muted); }
-
-    section { margin-bottom: 3.5rem; }
-
-    h2 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #ffffff;
-      margin-bottom: 1.25rem;
-      border-left: 4px solid var(--primary);
-      padding-left: 0.75rem;
-    }
-
-    h2.ai { border-left-color: #a855f7; }
-
-    h3 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--primary);
-      margin: 1.5rem 0 0.75rem 0;
-    }
-
-    h3.purple { color: #c084fc; }
-
-    p { margin-bottom: 1rem; color: var(--text-muted); }
-
-    .card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 0.75rem;
-      padding: 1.5rem;
-      margin-bottom: 1.5rem;
-      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
-    }
-
-    .card.ai-card {
-      background: linear-gradient(135deg, rgba(168,85,247,0.06), rgba(56,189,248,0.04));
-      border-color: rgba(168,85,247,0.25);
-    }
-
-    .card.highlight-card {
-      background: var(--highlight-bg);
-      border-color: var(--highlight-border);
-    }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .tech-pill {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid var(--card-border);
-      border-radius: 0.5rem;
-      padding: 1rem;
-    }
-
-    .tech-pill h4 { color: #ffffff; font-size: 0.95rem; margin-bottom: 0.25rem; }
-    .tech-pill p { font-size: 0.85rem; margin-bottom: 0; }
-
-    pre {
-      background-color: var(--code-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 0.5rem;
-      padding: 1.25rem;
-      overflow-x: auto;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-      font-size: 0.875rem;
-      color: #e5e7eb;
-      line-height: 1.5;
-      margin-bottom: 1rem;
-    }
-
-    code {
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-      background: rgba(255,255,255,0.1);
-      padding: 0.2rem 0.4rem;
-      border-radius: 0.25rem;
-      font-size: 0.85em;
-      color: var(--primary);
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 1.5rem;
-      font-size: 0.9rem;
-    }
-
-    th, td {
-      padding: 0.75rem 1rem;
-      text-align: left;
-      border-bottom: 1px solid var(--card-border);
-    }
-
-    th { background-color: rgba(255,255,255,0.03); color: #ffffff; font-weight: 600; }
-    td { color: var(--text-muted); }
-    td strong { color: #ffffff; }
-
-    ul, ol { margin-left: 1.5rem; margin-bottom: 1rem; color: var(--text-muted); }
-    li { margin-bottom: 0.5rem; }
-
-    .change-item {
-      display: flex;
-      gap: 0.75rem;
-      align-items: flex-start;
-      padding: 0.75rem 0;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-    .change-item:last-child { border-bottom: none; }
-
-    .change-tag {
-      display: inline-block;
-      padding: 0.15rem 0.6rem;
-      border-radius: 0.375rem;
-      font-size: 0.7rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      white-space: nowrap;
-      flex-shrink: 0;
-      margin-top: 0.1rem;
-    }
-
-    .tag-feat { background: rgba(52,211,153,0.15); color: var(--success); border: 1px solid rgba(52,211,153,0.3); }
-    .tag-fix  { background: rgba(251,191,36,0.15); color: var(--warning); border: 1px solid rgba(251,191,36,0.3); }
-    .tag-ui   { background: rgba(56,189,248,0.15); color: var(--primary); border: 1px solid rgba(56,189,248,0.3); }
-    .tag-arch { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); }
-
-    .change-desc { color: var(--text-muted); font-size: 0.9rem; }
-    .change-desc strong { color: #e5e7eb; }
-
-    .ai-box {
-      background: linear-gradient(135deg, rgba(168,85,247,0.08), rgba(56,189,248,0.05));
-      border: 1px solid rgba(168,85,247,0.3);
-      border-radius: 0.75rem;
-      padding: 1.5rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .ai-box h3 { color: #c084fc; margin-top: 0; }
-
-    .prompt-box {
-      background: #0a0f1e;
-      border: 1px solid rgba(168,85,247,0.4);
-      border-radius: 0.6rem;
-      padding: 1.25rem;
-      font-family: "SFMono-Regular", Consolas, monospace;
-      font-size: 0.84rem;
-      color: #e2e8f0;
-      line-height: 1.7;
-      white-space: pre-wrap;
-      word-break: break-word;
-      margin-bottom: 1rem;
-    }
-
-    .copy-note {
-      font-size: 0.78rem;
-      color: #a855f7;
-      font-style: italic;
-      margin-bottom: 1.5rem;
-    }
-
-    footer {
-      text-align: center;
-      padding-top: 2rem;
-      border-top: 1px solid var(--card-border);
-      color: var(--text-muted);
-      font-size: 0.875rem;
-    }
-  </style>
+  footer.doc { margin-top:56px; padding-top:20px; border-top:1px solid var(--rule);
+               font-size:13px; color:var(--ink-soft); }
+  @media print { body { background:#fff; } nav.toc { break-inside:avoid; } }
+</style>
 </head>
 <body>
-  <div class="container">
+<div class="wrap">
 
-    <header>
-      <span class="badge">Technical Reference — Updated Sept 2026</span>
-      <h1>Lumina — AI Teacher Platform</h1>
-      <p class="subtitle">Complete Technical Architecture, File Structure, Security Model, Database Reference &amp; AI Integration Guide</p>
-    </header>
+<header class="doc">
+  <p class="eyebrow">Project Documentation</p>
+  <h1>Lumina — an AI teacher that adapts</h1>
+  <p class="sub">
+    A web application that turns an uploaded document or a bare topic into a
+    personalised, spoken, adaptive teaching session — grounded in the learner's
+    own material and delivered by an animated AI teacher.
+  </p>
+</header>
 
+<nav class="toc">
+  <p>Contents</p>
+  <ol>
+    <li><a href="#problem">Problem statement</a></li>
+    <li><a href="#solution">Solution overview</a></li>
+    <li><a href="#features">Key features</a></li>
+    <li><a href="#architecture">System architecture</a></li>
+    <li><a href="#models">AI/ML models used</a></li>
+    <li><a href="#rag">RAG implementation</a></li>
+    <li><a href="#agent">Prompt and agent architecture</a></li>
+    <li><a href="#personalisation">Personalisation approach</a></li>
+    <li><a href="#assessment">Assessment methodology</a></li>
+    <li><a href="#multilingual">Multilingual implementation</a></li>
+    <li><a href="#voice">Voice implementation</a></li>
+    <li><a href="#video">Avatar and video generation</a></li>
+    <li><a href="#apis">APIs and third-party services</a></li>
+    <li><a href="#setup">Setup instructions</a></li>
+    <li><a href="#deployment">Deployment instructions</a></li>
+    <li><a href="#limitations">Known limitations</a></li>
+  </ol>
+</nav>
 
-    <!-- ========== SECTION 1: TECH STACK ========== -->
-    <section>
-      <h2>1. Technology Stack</h2>
-      <div class="grid">
-        <div class="tech-pill">
-          <h4>Framework &amp; Core</h4>
-          <p>Next.js 16.3.3 (App Router, Turbopack), React 19, TypeScript 5.7.3</p>
-        </div>
-        <div class="tech-pill">
-          <h4>Styling &amp; UI</h4>
-          <p>Tailwind CSS v4 (<code>@tailwindcss/postcss</code>), Lucide React icons, custom UI primitives</p>
-        </div>
-        <div class="tech-pill">
-          <h4>Backend &amp; Storage</h4>
-          <p>Supabase PostgreSQL, Supabase Auth (<code>@supabase/ssr</code>), Supabase Private Storage Bucket</p>
-        </div>
-        <div class="tech-pill">
-          <h4>Authentication</h4>
-          <p>OAuth 2.0 (Google, GitHub), Email/Password sign-in, NextAuth v5 integration</p>
-        </div>
-      </div>
-    </section>
+<!-- ─────────────────────────────────────────────────────── -->
+<h2 id="problem">1 · Problem statement</h2>
+<p>
+  Digital learning platforms offer pre-recorded lectures or text chatbots. Neither
+  teaches. A recorded lecture cannot notice that you did not follow the third
+  paragraph; a chatbot answers the question you asked rather than the one you
+  should have asked.
+</p>
+<p>
+  A human teacher does something different: they plan, explain, demonstrate, ask,
+  listen to the answer, work out <em>which</em> misunderstanding produced it, and
+  explain again from a different angle. Lumina implements that loop.
+</p>
 
+<h2 id="solution">2 · Solution overview</h2>
+<p>
+  The learner uploads material — PDF, DOCX, PPTX, TXT, MD — or names a topic, and
+  states their level, language, available time and goal. Lumina then:
+</p>
+<ol>
+  <li>Parses, chunks and embeds the document into a vector store</li>
+  <li>Retrieves the passages relevant to the topic</li>
+  <li>Generates a structured lesson plan sized to the stated time</li>
+  <li>Teaches it aloud through an animated avatar in the chosen language</li>
+  <li>Asks graded checkpoint questions</li>
+  <li>Diagnoses the specific misconception behind a wrong answer</li>
+  <li>Re-explains using a deliberately different analogy, then re-tests</li>
+  <li>Adjusts difficulty from performance and carries weak concepts into the next lesson</li>
+  <li>Produces a report and an exportable teaching video</li>
+</ol>
 
-    <!-- ========== SECTION 2: FILE STRUCTURE ========== -->
-    <section>
-      <h2>2. Complete Folder &amp; File Structure</h2>
-      <div class="card">
-        <pre>
-ai-teacher-platform/
-├── app/                              # Next.js App Router root
-│   ├── (app)/                        # Protected authenticated routes layout
-│   │   ├── classroom/                # AI Classroom page (live teaching engine)
-│   │   │   └── page.tsx              ★ HEAVILY MODIFIED (see Section 7)
-│   │   ├── dashboard/
-│   │   │   └── page.tsx
-│   │   ├── lesson-plan/
-│   │   │   └── page.tsx
-│   │   ├── materials/
-│   │   │   └── page.tsx              ★ MODIFIED (upload button fix)
-│   │   ├── personalize/
-│   │   │   └── page.tsx
-│   │   ├── progress/
-│   │   │   ├── assessment/
-│   │   │   │   └── page.tsx          ★ MODIFIED (Suspense fix)
-│   │   │   ├── path/
-│   │   │   │   └── page.tsx
-│   │   │   └── report/
-│   │   │       └── page.tsx
-│   │   ├── settings/
-│   │   │   └── page.tsx
-│   │   ├── start/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx
-│   ├── api/
-│   │   ├── auth/
-│   │   │   ├── [...nextauth]/
-│   │   │   │   └── route.ts
-│   │   │   └── delete-account/       ★ NEW — server-side admin user deletion
-│   │   │       └── route.ts
-│   │   ├── materials/
-│   │   │   └── route.ts              ★ MODIFIED (auto-bucket creation)
-│   │   └── progress/
-│   │       └── assessment/
-│   │           └── route.ts
-│   ├── auth/callback/
-│   │   └── page.tsx                  ★ MODIFIED (Suspense fix)
-│   ├── login/
-│   │   └── page.tsx                  ★ MODIFIED (Suspense fix)
-│   ├── reset-password/
-│   │   └── page.tsx
-│   ├── setup-profile/
-│   │   └── page.tsx
-│   ├── signup/
-│   │   └── page.tsx
-│   ├── layout.tsx
-│   ├── globals.css
-│   └── page.tsx
-├── components/
-│   ├── app/
-│   │   ├── app-sidebar.tsx
-│   │   ├── app-topbar.tsx
-│   │   ├── ask-teacher-panel.tsx
-│   │   ├── delete-account-button.tsx ★ NEW — Danger Zone delete button &amp; modal
-│   │   ├── nav-items.ts
-│   │   ├── option-group.tsx
-│   │   ├── page-header.tsx
-│   │   └── sign-out-button.tsx
-│   ├── landing/
-│   ├── ui/
-│   │   ├── badge.tsx
-│   │   ├── button.tsx
-│   │   ├── card.tsx
-│   │   ├── link-button.tsx
-│   │   └── progress.tsx
-│   ├── logo.tsx
-│   └── providers.tsx
-├── lib/
-│   ├── auth/
-│   │   └── supabase-auth.ts
-│   ├── supabase/
-│   │   ├── client.ts
-│   │   └── server.ts
-│   ├── format-date.ts
-│   ├── mock-data.ts
-│   ├── teacher-engine.ts             ★ MODIFIED (visualPayload support)
-│   └── utils.ts
-├── supabase/
-│   └── migrations/
-│       ├── 20260831_create_application_schema.sql
-│       ├── 20260831_assessment_results.sql
-│       ├── 20260831_materials_storage.sql        ★ MODIFIED (FK fix)
-│       └── 20260831_lesson_progress_persistence.sql
-├── .env.example
-├── .env.local
-├── auth.ts
-├── middleware.ts
-├── next.config.mjs
-├── package.json
-├── tsconfig.json
-└── project_documentation.html       ← This file
-        </pre>
-      </div>
-    </section>
+<h2 id="features">3 · Key features</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Feature</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Document grounding</td><td>Retrieval over the learner's own uploads, so lessons cite their material rather than general knowledge</td></tr>
+    <tr><td>Topic teaching</td><td>Works with no upload at all — any topic, any level</td></tr>
+    <tr><td>Time-aware planning</td><td>A 20-minute request produces four five-minute sections, not a generic lesson</td></tr>
+    <tr><td>Spoken avatar</td><td>Neural narration with viseme lip-sync driven by the real utterance</td></tr>
+    <tr><td>Adaptive checkpoints</td><td>Three graded questions; difficulty moves with performance</td></tr>
+    <tr><td>Misconception diagnosis</td><td>Names the specific misunderstanding, not just "incorrect"</td></tr>
+    <tr><td>Different-analogy re-explanation</td><td>The retry explanation is explicitly required to differ from the first</td></tr>
+    <tr><td>Live Q&amp;A</td><td>Ask the teacher mid-lesson; history is preserved so follow-ups resolve</td></tr>
+    <tr><td>Video export</td><td>The lesson rendered to a downloadable MP4 with burned-in captions</td></tr>
+    <tr><td>Progress tracking</td><td>Streaks, study minutes, concepts mastered, per-lesson resume</td></tr>
+    <tr><td>Learning report</td><td>Score, strong and weak concepts, revision guide, next topic</td></tr>
+  </tbody>
+</table>
+</div>
 
+<h2 id="architecture">4 · System architecture</h2>
+<p>
+  A single Next.js 16 application. Server components and route handlers hold all
+  privileged work; the browser never sees an API key.
+</p>
+<pre>Browser
+  │
+  ├── /start          upload → /api/materials → /api/materials/[id]/process
+  ├── /lesson-plan    → /api/teacher/generate-lesson   (generates once, caches)
+  ├── /classroom      → /api/teacher/evaluate-answer
+  │                   → /api/teacher/ask
+  │                   → /api/teacher/speak
+  │                   → /api/progress/lesson
+  └── /progress/*     → /api/progress/assessment
+        │
+        ▼
+Next.js route handlers  ── Supabase (Postgres + pgvector + Storage + Auth)
+        │
+        ├── lib/ai/providers      provider abstraction, retry, model fallback
+        ├── lib/ai/rag            chunker, embedder, retriever
+        ├── lib/ai/teacher        prompt contracts, generator, evaluator
+        ├── lib/speech            visemes, Web Speech hook
+        └── lib/video             canvas compositor, MediaRecorder pipeline</pre>
 
-    <!-- ========== SECTION 3: DATABASE SCHEMA ========== -->
-    <section>
-      <h2>3. Database Schema &amp; RLS Security</h2>
-      <div class="card">
-        <table>
-          <thead>
-            <tr>
-              <th>Table</th>
-              <th>Primary Key</th>
-              <th>Foreign Keys</th>
-              <th>Purpose &amp; RLS Rule</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>profiles</strong></td>
-              <td><code>id</code> (UUID)</td>
-              <td><code>auth.users(id)</code> Cascade</td>
-              <td>Username, display name, email. RLS: <code>auth.uid() = id</code></td>
-            </tr>
-            <tr>
-              <td><strong>courses</strong></td>
-              <td><code>id</code> (UUID)</td>
-              <td><code>created_by → profiles(id)</code></td>
-              <td>Course metadata &amp; demo courses. RLS enabled.</td>
-            </tr>
-            <tr>
-              <td><strong>lessons</strong></td>
-              <td><code>id</code> (UUID)</td>
-              <td><code>course_id → courses(id)</code></td>
-              <td>Lesson steps, order index, content payload.</td>
-            </tr>
-            <tr>
-              <td><strong>user_courses</strong></td>
-              <td><code>id</code> (UUID)</td>
-              <td><code>user_id → profiles(id)</code>, <code>course_id → courses(id)</code></td>
-              <td>Student enrollments. RLS: <code>auth.uid() = user_id</code></td>
-            </tr>
-            <tr>
-              <td><strong>lesson_progress</strong></td>
-              <td><code>id</code> (UUID)</td>
-              <td><code>user_id → profiles(id)</code></td>
-              <td>Current phase, paused state, snapshot JSON. RLS enabled.</td>
-            </tr>
-            <tr>
-              <td><strong>assessments</strong></td>
-              <td><code>id</code> (UUID)</td>
-              <td><code>user_id → profiles(id)</code></td>
-              <td>Historical scores. RLS: <code>auth.uid() = user_id</code></td>
-            </tr>
-            <tr>
-              <td><strong>materials</strong></td>
-              <td><code>id</code> (UUID)</td>
-              <td><code>user_id → auth.users(id)</code> Cascade</td>
-              <td>Document metadata &amp; storage path. RLS: <code>auth.uid() = user_id</code></td>
-            </tr>
-            <tr>
-              <td><strong>assessment_results</strong></td>
-              <td><code>id</code> (UUID)</td>
-              <td><code>user_id → auth.users(id)</code> Cascade</td>
-              <td>Quiz history, strong/weak areas. RLS enabled.</td>
-            </tr>
-          </tbody>
-        </table>
-        <h3>Storage Bucket</h3>
-        <ul>
-          <li><strong>Bucket ID:</strong> <code>materials</code> (Private, <code>public = false</code>)</li>
-          <li><strong>Path Convention:</strong> <code>materials/{user_id}/{uuid}_{filename}</code></li>
-          <li><strong>Storage RLS:</strong> Read, upload, and delete policies enforce <code>(storage.foldername(name))[1] = auth.uid()::text</code></li>
-        </ul>
-      </div>
-    </section>
+<h3>Data model</h3>
+<div class="scroll">
+<table>
+  <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>profiles</code></td><td>Learner identity, mirrors <code>auth.users</code></td></tr>
+    <tr><td><code>courses</code>, <code>lessons</code></td><td>Curriculum. Generated lessons get rows in a per-learner course</td></tr>
+    <tr><td><code>lesson_progress</code></td><td>Status, percentage, current section, resumable state</td></tr>
+    <tr><td><code>materials</code></td><td>Uploaded files, processing status, chunk counts</td></tr>
+    <tr><td><code>material_chunks</code></td><td>Text chunks plus <code>vector(768)</code> embeddings</td></tr>
+    <tr><td><code>assessment_results</code></td><td>Score, strong/weak concepts, recommendations</td></tr>
+    <tr><td><code>learning_activity</code></td><td>Daily study minutes, powering streaks</td></tr>
+  </tbody>
+</table>
+</div>
+<p>
+  Row-level security is enabled on every table; each policy scopes rows to
+  <code>auth.uid()</code>. The service-role key is used only server-side, for
+  writing chunks during indexing.
+</p>
 
+<h2 id="models">5 · AI/ML models used</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Purpose</th><th>Model</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Lesson generation, evaluation, Q&amp;A</td><td><code>gemini-3.5-flash</code></td><td>Configurable; falls back through a chain</td></tr>
+    <tr><td>Embeddings</td><td><code>gemini-embedding-001</code></td><td>Requested at 768 dimensions to match the schema</td></tr>
+    <tr><td>Narration</td><td>Microsoft Edge neural voices</td><td>Primary — no key, no quota, 322 voices</td></tr>
+    <tr><td>Narration fallback</td><td><code>gemini-3.1-flash-tts-preview</code></td><td>Used only if Edge is unreachable</td></tr>
+    <tr><td>Live in-page speech</td><td>Web Speech API</td><td>Browser-native, zero latency</td></tr>
+  </tbody>
+</table>
+</div>
 
-    <!-- ========== SECTION 4: AUTH & SECURITY ========== -->
-    <section>
-      <h2>4. Authentication &amp; Security Architecture</h2>
-      <div class="card">
-        <h3>Middleware Guard</h3>
-        <p>The <code>middleware.ts</code> script intercepts all incoming requests to protected routes (<code>/dashboard</code>, <code>/classroom</code>, <code>/materials</code>, <code>/progress</code>, <code>/settings</code>). Unauthenticated requests are redirected to <code>/login?callbackUrl=...</code>.</p>
+<div class="note">
+  <span class="tag">Design decision</span>
+  <p>
+    Free-tier Gemini quota is granted <strong>per model per day</strong> and is
+    small — 20 requests/day on some models. Generation therefore walks a chain of
+    five models, each with an independent quota, and only quota or access errors
+    advance it. A genuine failure still fails fast rather than being retried five
+    times.
+  </p>
+</div>
 
-        <h3>Account Deletion &amp; Data Wiping</h3>
-        <p>Executed exclusively on the server via <code>POST /api/auth/delete-account</code>:</p>
-        <ol>
-          <li>Caller's session is validated via cookies using <code>supabase.auth.getUser()</code>.</li>
-          <li>User's private files are removed from Supabase Storage.</li>
-          <li>User deleted from Supabase Auth using <code>SUPABASE_SERVICE_ROLE_KEY</code> admin client (<code>admin.deleteUser(userId)</code>).</li>
-          <li>PostgreSQL <code>ON DELETE CASCADE</code> constraints automatically wipe all profile, enrollment, lesson progress, assessment, and material metadata rows.</li>
-        </ol>
-      </div>
-    </section>
+<h2 id="rag">6 · RAG implementation</h2>
+<ol>
+  <li><strong>Upload</strong> — the file goes to Supabase Storage; a <code>materials</code> row records it.</li>
+  <li><strong>Parse</strong> — a per-format parser extracts structured sections. PDFs are read page by page via <code>pdf-parse</code> v2, preserving page numbers; DOCX via mammoth; PPTX slide by slide.</li>
+  <li><strong>Chunk</strong> — sections are split into overlapping chunks carrying section title, page number and token count.</li>
+  <li><strong>Embed</strong> — chunks are embedded in batches of 100 via <code>batchEmbedContents</code> at 768 dimensions.</li>
+  <li><strong>Store</strong> — vectors go into <code>material_chunks.embedding</code>, indexed with ivfflat under cosine distance.</li>
+  <li><strong>Retrieve</strong> — the topic is embedded and matched by <code>match_material_chunks</code>, returning the top 8 above a 0.45 similarity floor, scoped to the learner.</li>
+  <li><strong>Inject</strong> — retrieved passages are formatted with relevance scores and placed in the generation prompt.</li>
+</ol>
+<p>
+  Grounding is verifiable in the server log: <code>Injecting N chunks as
+  context</code> appears before generation, and lessons contain specifics that
+  could not be inferred from a filename.
+</p>
 
+<div class="note">
+  <span class="tag">Dimension constraint</span>
+  <p>
+    <code>gemini-embedding-001</code> returns 3072 dimensions by default, which the
+    <code>vector(768)</code> column rejects. The pinned SDK exposes no dimension
+    parameter, so embedding calls go over REST with
+    <code>outputDimensionality: 768</code>, and the provider throws if a returned
+    vector is ever the wrong length rather than letting a mismatch reach the
+    database.
+  </p>
+</div>
 
-    <!-- ========== SECTION 5: API ROUTES ========== -->
-    <section>
-      <h2>5. Backend API Endpoints Reference</h2>
-      <div class="card">
-        <table>
-          <thead>
-            <tr>
-              <th>Method</th>
-              <th>Endpoint</th>
-              <th>Auth</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>GET</code></td>
-              <td><code>/api/materials</code></td>
-              <td>Cookie Session</td>
-              <td>Returns array of uploaded materials for the authenticated user.</td>
-            </tr>
-            <tr>
-              <td><code>POST</code></td>
-              <td><code>/api/materials</code></td>
-              <td>Cookie Session</td>
-              <td>Uploads file to Supabase Storage and records metadata row in DB.</td>
-            </tr>
-            <tr>
-              <td><code>DELETE</code></td>
-              <td><code>/api/materials</code></td>
-              <td>Cookie Session</td>
-              <td>Removes file from Storage and deletes DB record.</td>
-            </tr>
-            <tr>
-              <td><code>GET</code></td>
-              <td><code>/api/progress/assessment</code></td>
-              <td>Cookie Session</td>
-              <td>Retrieves latest assessment result for a given <code>lessonId</code>.</td>
-            </tr>
-            <tr>
-              <td><code>POST</code></td>
-              <td><code>/api/progress/assessment</code></td>
-              <td>Cookie Session</td>
-              <td>Scores checkpoint answers, generates strong/weak report, upserts to DB.</td>
-            </tr>
-            <tr>
-              <td><code>POST</code></td>
-              <td><code>/api/auth/delete-account</code></td>
-              <td>Cookie Session</td>
-              <td>Deletes all user files and permanently purges auth account.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+<h2 id="agent">7 · Prompt and agent architecture</h2>
+<p>
+  Rather than one long conversational prompt, teaching is split into three
+  contracts, each returning strict JSON. Every prompt lives in
+  <code>lib/ai/teacher/prompts.ts</code>, so teaching behaviour is changed by
+  editing prompts, never the provider.
+</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Contract</th><th>Returns</th><th>Notable instruction</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>LESSON_GENERATION</code></td>
+      <td>Title, objective, narrative, key points, visual payload, sections, three graded questions, re-explanation, next topic</td>
+      <td>Re-explanation <strong>must</strong> use a different analogy from the teaching narrative</td>
+    </tr>
+    <tr>
+      <td><code>ANSWER_EVALUATION</code></td>
+      <td>Correctness, feedback, correct answer, re-explanation, <code>misunderstandingDetected</code></td>
+      <td>Detect the <em>specific</em> misconception, not just right or wrong</td>
+    </tr>
+    <tr>
+      <td><code>ASK_TEACHER</code></td>
+      <td>Answer plus follow-up suggestions</td>
+      <td>Stay within the current lesson's scope</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<p>
+  Responses are validated and normalised before reaching the UI: missing fields
+  throw with a named field, question shapes are coerced, and the older
+  single-question format is still accepted so cached lessons keep working.
+</p>
 
+<h2 id="personalisation">8 · Personalisation approach</h2>
+<p>Four inputs shape every lesson — level, language, goal and available time —
+and three signals accumulate as the learner works:</p>
+<ul>
+  <li><strong>Covered topics.</strong> Previous lesson titles are passed forward, with an instruction not to repeat what the learner already knows.</li>
+  <li><strong>Weak concepts.</strong> Every missed checkpoint records the concept it tested. Those are injected into the next lesson's prompt, which is told to reconnect to them, explain from a different angle, and test them directly in the easy checkpoint.</li>
+  <li><strong>Difficulty state.</strong> The running answer history moves the target difficulty up or down.</li>
+</ul>
+<p>
+  Time drives structure directly: a 20-minute request yields four five-minute
+  sections whose minutes sum to the request.
+</p>
 
-    <!-- ========== SECTION 6: OPERATIONAL COMMANDS ========== -->
-    <section>
-      <h2>6. Operational Commands</h2>
-      <div class="card">
-        <pre>
-# Start local development server
-npm run dev
+<h2 id="assessment">9 · Assessment methodology</h2>
+<p>Each lesson carries three checkpoints, tagged with difficulty and with the concept under test:</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Tier</th><th>Tests</th></tr></thead>
+  <tbody>
+    <tr><td><code>easy</code></td><td>Recall — a learner who followed the explanation should pass</td></tr>
+    <tr><td><code>core</code></td><td>Genuine understanding of the central idea</td></tr>
+    <tr><td><code>stretch</code></td><td>Application to a situation the explanation never covered</td></tr>
+  </tbody>
+</table>
+</div>
+<p>
+  A correct answer steps difficulty up; a wrong one steps it down, and the
+  interface says which is happening. Wrong answers trigger diagnosis: the
+  misconception is named, re-explained with a different analogy, and the learner
+  can retry the same question or drop to an easier one.
+</p>
+<p>
+  The final report is computed from what was actually answered — strong and weak
+  areas are the real concept names from the generated lesson, and mastery derives
+  from the achieved score.
+</p>
 
-# TypeScript type check
-npx tsc --noEmit
+<h2 id="multilingual">10 · Multilingual implementation</h2>
+<ul>
+  <li><strong>Generation.</strong> The requested language is stated in the learner profile and reinforced by an explicit rule covering every learner-facing string. Technical terms may retain their English form in parentheses, which is how these subjects are normally taught in Indian classrooms.</li>
+  <li><strong>Cross-language grounding.</strong> Retrieved passages and output language are independent, so an English document can be taught in Hindi and vice versa.</li>
+  <li><strong>Narration.</strong> The language maps to a BCP-47 tag and then to a matching neural voice; 21 Indian voices are available.</li>
+  <li><strong>Lip-sync.</strong> Visemes are mapped from both Latin and Devanagari characters, so Hindi and Hinglish animate rather than sitting still.</li>
+  <li><strong>Cache correctness.</strong> The lesson cache key includes language, so changing language regenerates rather than reusing.</li>
+</ul>
 
-# Run production build (also verifies compilation)
-npx next build
+<h2 id="voice">11 · Voice implementation</h2>
+<p>Two paths, chosen by context:</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Context</th><th>Engine</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>Live classroom</td><td>Web Speech API</td><td>Zero latency, no network, no quota</td></tr>
+    <tr><td>Video export</td><td>Edge neural TTS via <code>/api/teacher/speak</code></td><td>Returns audio <em>bytes</em>, which can be mixed into the recording</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="note">
+  <span class="tag">Why two engines</span>
+  <p>
+    <code>speechSynthesis</code> writes directly to the output device and cannot be
+    routed into a <code>MediaStream</code>. It is ideal live and useless for
+    recording. Edge TTS returns an MP3, which is decoded through Web Audio and
+    mixed into the video — so the exported file has narration without asking the
+    viewer to share their screen.
+  </p>
+</div>
+<p>
+  Lip-sync uses six visemes (the Preston Blair set reduced for real time). Live,
+  it is driven by <code>boundary</code> events with an estimated fallback, because
+  those events are optional in the spec and most non-English voices never emit
+  them. During export, clip duration is known from <code>decodeAudioData</code>,
+  so timing is exact.
+</p>
 
-# Clear Next.js build cache (safe — dev server auto-rebuilds)
-Remove-Item -Recurse -Force .next
-        </pre>
-      </div>
-    </section>
+<h2 id="video">12 · Avatar and video generation</h2>
+<p>
+  The avatar is drawn as SVG in the live classroom and re-drawn on a canvas for
+  export. It is not a pre-rendered clip, and that is the point: pre-rendered
+  avatar video cannot say something different when a learner is confused, which
+  is precisely what the adaptive loop requires.
+</p>
+<p>Export composes a 1280×720 video at 30 fps containing the avatar with live
+  lip-sync, the current slide, burned-in captions and a progress bar. The
+  recorder drives its own narration and waits for each clip to finish, so
+  captions, mouth and slides cannot drift apart.</p>
+<div class="note">
+  <span class="tag">Encoder constraints</span>
+  <p>
+    Chrome reports <code>mp4a.40.2</code> (AAC) as supported and then throws
+    <code>EncodingError</code> at record time whenever an audio track is attached,
+    producing a zero-byte file. The audio codec is therefore left unspecified so
+    Chrome negotiates one it can encode. Audio is also proven — first clip
+    fetched and decoded — before a track is attached, because a track carrying no
+    samples stalls the muxer and truncates the video to under a second.
+  </p>
+  <p>
+    Painting runs on <code>setInterval</code>, not <code>requestAnimationFrame</code>,
+    which browsers suspend entirely in hidden tabs.
+  </p>
+</div>
 
+<h2 id="apis">13 · APIs and third-party services</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Service / library</th><th>Used for</th><th>Cost</th></tr></thead>
+  <tbody>
+    <tr><td>Google Gemini API</td><td>Generation, evaluation, embeddings, TTS fallback</td><td>Free tier</td></tr>
+    <tr><td>Supabase</td><td>Postgres, pgvector, Auth, Storage</td><td>Free tier</td></tr>
+    <tr><td>Microsoft Edge TTS (<code>msedge-tts</code>)</td><td>Narration for video export</td><td>Free, no key</td></tr>
+    <tr><td>Web Speech API</td><td>Live narration</td><td>Browser built-in</td></tr>
+    <tr><td>MediaRecorder / Canvas / Web Audio</td><td>Video composition and export</td><td>Browser built-in</td></tr>
+    <tr><td>Next.js 16, React 19, Tailwind v4</td><td>Application framework and UI</td><td>Open source</td></tr>
+    <tr><td><code>pdf-parse</code> v2, <code>mammoth</code>, <code>adm-zip</code></td><td>PDF, DOCX and PPTX parsing</td><td>Open source</td></tr>
+  </tbody>
+</table>
+</div>
+<p>No paid service is required to run or demonstrate the project.</p>
 
-    <!-- ========== SECTION 7: RECENT CHANGES ========== -->
-    <section>
-      <h2>7. Recent Changes &amp; Feature Log</h2>
-      <p>All changes made during the August–September 2026 development session are listed below.</p>
+<h2 id="setup">14 · Setup instructions</h2>
+<p>Full detail in <code>docs/setup.md</code>. In brief:</p>
+<pre>pnpm install
+cp .env.example .env.local     # add Supabase keys + GOOGLE_AI_API_KEY
+                               # set NEXT_PUBLIC_USE_REAL_AI_TEACHER=true
+# run all 7 files in supabase/migrations/ in filename order
+pnpm dev                       # http://localhost:3000</pre>
+<div class="note">
+  <span class="tag">Two traps</span>
+  <p>
+    Without <code>NEXT_PUBLIC_USE_REAL_AI_TEACHER=true</code> the app silently
+    serves mock lessons. Skipping migrations 5 and 6 leaves retrieval returning
+    zero chunks while lessons still generate — grounding fails without an error.
+  </p>
+  <p>
+    Do not develop inside a cloud-synced folder; sync clients break Turbopack's
+    <code>.next</code> writes.
+  </p>
+</div>
 
-      <div class="card">
-        <h3>Materials Page</h3>
-        <div class="change-item">
-          <span class="change-tag tag-fix">Fix</span>
-          <div class="change-desc"><strong>Upload button binding:</strong> The primary "Upload Your First File" button was decorative. It was bound to the same <code>inputRef.current?.click()</code> handler used by the hidden <code>&lt;input type="file"&gt;</code>, so clicking it now opens the native file picker.</div>
-        </div>
-        <div class="change-item">
-          <span class="change-tag tag-fix">Fix</span>
-          <div class="change-desc"><strong>Materials API auto-bucket:</strong> <code>app/api/materials/route.ts</code> now auto-creates the <code>materials</code> Supabase Storage bucket if it does not exist, preventing 500 errors on first use.</div>
-        </div>
-        <div class="change-item">
-          <span class="change-tag tag-fix">Fix</span>
-          <div class="change-desc"><strong>FK constraint fix:</strong> <code>supabase/migrations/20260831_materials_storage.sql</code> updated to point the <code>materials.user_id</code> FK directly to <code>auth.users(id)</code> instead of <code>profiles(id)</code>, resolving insertion errors for users without a profile row.</div>
-        </div>
+<h2 id="deployment">15 · Deployment instructions</h2>
+<ol>
+  <li>Push to GitHub and import the repository into Vercel.</li>
+  <li>Set <code>NEXT_PUBLIC_SUPABASE_URL</code>, <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>GOOGLE_AI_API_KEY</code>, <code>NEXT_PUBLIC_USE_REAL_AI_TEACHER=true</code> and optionally <code>GEMINI_MODEL</code>.</li>
+  <li>Run all migrations against the production Supabase project.</li>
+  <li>Add the deployment origin to Supabase → Authentication → URL configuration, and to each OAuth provider's callback list.</li>
+  <li>Deploy. <code>pnpm build</code> then <code>pnpm start</code> works for any Node host.</li>
+</ol>
+<p>
+  <code>/api/teacher/speak</code> opens a WebSocket and is pinned to the Node
+  runtime; it will not work on an edge runtime.
+</p>
 
-        <h3>Settings Page</h3>
-        <div class="change-item">
-          <span class="change-tag tag-feat">Feat</span>
-          <div class="change-desc"><strong>Delete Account (Danger Zone):</strong> Added a permanent account deletion feature via a new <code>DELETE</code> API route (<code>/api/auth/delete-account</code>) and a <code>DeleteAccountButton</code> component with a confirmation modal. Server uses the Supabase Admin client with the Service Role Key — no client-side privilege escalation.</div>
-        </div>
+<h2 id="limitations">16 · Known limitations</h2>
+<ul>
+  <li><strong>Free-tier quota.</strong> Gemini limits are per model per day and small. The model chain mitigates this but does not remove it.</li>
+  <li><strong>Generation latency.</strong> A lesson takes roughly 30 seconds. It is generated once and cached for the classroom, but the first wait is unavoidable.</li>
+  <li><strong>Lip-sync is approximate live.</strong> The Web Speech API exposes word boundaries at best, so live sync is word-level. Export sync is exact.</li>
+  <li><strong>Exported audio is Opus in MP4.</strong> Chrome cannot encode AAC here. Modern players handle it; QuickTime and PowerPoint may play the video silently.</li>
+  <li><strong>Edge TTS is unofficial.</strong> It uses the endpoint behind Edge's Read Aloud. Stable in practice, but not a published API — hence the Gemini fallback.</li>
+  <li><strong>Coarse DOCX chunking.</strong> The DOCX parser emits a single section per document, so retrieval is less precise than for PDFs.</li>
+  <li><strong>Language switching is per-lesson.</strong> Changing language regenerates the lesson rather than translating in place mid-session.</li>
+  <li><strong>Progress is per-lesson, not per-section.</strong> Resuming returns to the lesson, not the exact sentence.</li>
+  <li><strong>No offline mode.</strong> Generation, embedding and export narration all require network access.</li>
+</ul>
 
-        <h3>AI Classroom — Input &amp; UX Fixes</h3>
-        <div class="change-item">
-          <span class="change-tag tag-fix">Fix</span>
-          <div class="change-desc"><strong>Feedback persistence:</strong> Removed the 1.2s <code>setTimeout</code> that was auto-dismissing the Teacher Feedback / Re-explanation UI. Feedback now stays permanently visible until the user explicitly clicks the "Next segment" or "Continue lesson" button.</div>
-        </div>
-        <div class="change-item">
-          <span class="change-tag tag-feat">Feat</span>
-          <div class="change-desc"><strong>Input validation:</strong> Submitting an empty or whitespace-only text answer no longer triggers the AI evaluation flow. The Submit button is disabled until valid text is entered or a MCQ option is selected. An error prompt is shown if the user tries to submit empty input.</div>
-        </div>
+<footer class="doc">
+  Lumina · AI Teacher — Bharat Academix AI Innovation Hackathon 2026, Round 2.
+  Source: <code>github.com/Utsav1x/ai-teacher</code>
+</footer>
 
-        <h3>AI Classroom — Visual Blackboard (3-prompt Feature Build)</h3>
-        <div class="change-item">
-          <span class="change-tag tag-feat">Feat</span>
-          <div class="change-desc"><strong>Split layout (Prompt 1):</strong> The AI Avatar (Maya) container was converted from a full-width card into a responsive side-by-side grid. A new "Visual Blackboard" container placeholder was added to the right.</div>
-        </div>
-        <div class="change-item">
-          <span class="change-tag tag-arch">Arch</span>
-          <div class="change-desc"><strong>visualPayload data model (Prompt 2):</strong> Added optional <code>visualPayload?: string</code> field to the <code>TeacherLesson</code>, <code>question</code>, and <code>TeacherEvaluation</code> TypeScript types in <code>lib/teacher-engine.ts</code>. The "Introduction to Neural Networks" lesson now ships with a Python forward-pass snippet (teaching phase) and a linear math text diagram (question phase). The <code>MockTeacherEngine.evaluateAnswer()</code> method propagates <code>visualPayload</code> in evaluation responses. A <code>currentVisualPayload</code> React state variable and <code>useEffect</code> sync hook were added to <code>classroom/page.tsx</code>.</div>
-        </div>
-        <div class="change-item">
-          <span class="change-tag tag-ui">UI</span>
-          <div class="change-desc"><strong>Dynamic Blackboard rendering (Prompt 3):</strong> The Blackboard container is conditionally rendered only when <code>currentVisualPayload</code> has content. When empty, the layout collapses to a single full-width column (Avatar takes 100% width). When payload exists, the layout uses a 12-column CSS grid: Avatar at <code>lg:col-span-5</code>, Blackboard at <code>lg:col-span-7</code>. The Blackboard renders code inside a styled <code>&lt;pre&gt;&lt;code&gt;</code> block with markdown fence stripping, language detection badge, and a "Live Sync" indicator.</div>
-        </div>
-
-        <h3>AI Classroom — Layout Polish</h3>
-        <div class="change-item">
-          <span class="change-tag tag-ui">UI</span>
-          <div class="change-desc"><strong>Avatar card internal layout:</strong> Replaced the absolute-positioned overlay layout with a proper <code>flex flex-col justify-between</code> hierarchy. The transcript text is now contained in a <code>max-h-28 overflow-y-auto</code> scrollable box. Controls (Play/Pause, Replay, End Lesson) sit in a dedicated bottom bar separated by a border, eliminating overlap with transcript text on narrow columns.</div>
-        </div>
-        <div class="change-item">
-          <span class="change-tag tag-ui">UI</span>
-          <div class="change-desc"><strong>Blackboard code styling:</strong> Font size reduced to <code>text-xs</code>. Neon green color replaced with <code>text-gray-200</code>. Applied <code>whitespace-pre-wrap</code> and <code>break-words</code> to eliminate horizontal scrollbars on long lines.</div>
-        </div>
-
-        <h3>Build &amp; Auth Stability</h3>
-        <div class="change-item">
-          <span class="change-tag tag-fix">Fix</span>
-          <div class="change-desc"><strong>Suspense prerender fix:</strong> All components using <code>useSearchParams()</code> (in <code>/login</code>, <code>/auth/callback</code>, <code>/progress/assessment</code>) were wrapped in <code>&lt;Suspense&gt;</code> boundaries to pass Next.js static prerender checks. All 22 routes compile cleanly with <code>npx next build</code>.</div>
-        </div>
-      </div>
-    </section>
-
-
-    <!-- ========== SECTION 8: AI CLASSROOM STATE MODEL ========== -->
-    <section>
-      <h2>8. AI Classroom — State &amp; Engine Architecture</h2>
-      <div class="card">
-        <h3>Lesson Phases</h3>
-        <p>The classroom component is driven by a <code>LessonPhase</code> state machine. Valid phases are:</p>
-        <pre>
-type LessonPhase =
-  | 'teaching'      // Maya delivers the teaching narrative
-  | 'question'      // MCQ or short-answer question is displayed
-  | 'answering'     // User is typing or selecting an answer
-  | 'evaluating'    // AI evaluates the submitted answer
-  | 'reexplaining'  // Maya re-explains if answer was wrong
-  | 'continuing'    // Lesson complete; prompt to start next lesson
-        </pre>
-
-        <h3>MockTeacherEngine (lib/teacher-engine.ts)</h3>
-        <p>The <code>MockTeacherEngine</code> implements the <code>TeacherEngine</code> interface with three methods:</p>
-        <table>
-          <thead>
-            <tr><th>Method</th><th>Input</th><th>Returns</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>getLessonById(lessonId)</code></td>
-              <td><code>TeacherLessonId</code></td>
-              <td><code>TeacherLesson</code> — full lesson data including <code>visualPayload</code></td>
-            </tr>
-            <tr>
-              <td><code>evaluateAnswer(lessonId, selectedIndex)</code></td>
-              <td><code>lessonId</code>, user's answer index</td>
-              <td><code>TeacherEvaluation</code> — feedback, correctAnswer, reexplanation, <code>visualPayload</code></td>
-            </tr>
-            <tr>
-              <td><code>continueLesson(lessonId)</code></td>
-              <td><code>TeacherLessonId</code></td>
-              <td><code>LessonContinuation</code> — next lesson ID or completion message</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <h3>visualPayload Data Flow</h3>
-        <pre>
-TeacherLesson.visualPayload
-  → Phase: 'teaching'
-  → currentVisualPayload state ← useEffect sync
-
-TeacherLesson.question.visualPayload
-  → Phase: 'question' | 'answering'
-  → currentVisualPayload state ← useEffect sync
-
-TeacherEvaluation.visualPayload (from question.visualPayload)
-  → Phase: 'evaluating' | 'reexplaining'
-  → currentVisualPayload state ← useEffect sync
-
-currentVisualPayload → Visual Blackboard container (rendered conditionally)
-        </pre>
-
-        <h3>Current Lessons in Mock Data</h3>
-        <table>
-          <thead>
-            <tr><th>Lesson ID</th><th>Title</th><th>Has visualPayload?</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>ai-teacher-demo-lesson-1</code></td>
-              <td>Introduction to Neural Networks</td>
-              <td>✅ Yes — Python forward pass snippet + linear math diagram</td>
-            </tr>
-            <tr>
-              <td><code>ai-teacher-demo-lesson-2</code></td>
-              <td>How Neural Networks Learn</td>
-              <td>❌ No (no visualPayload yet)</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-
-    <!-- ========== SECTION 9: AI INTEGRATION GUIDE FOR CHATGPT ========== -->
-    <section>
-      <h2 class="ai">9. AI Integration Guide — Context for ChatGPT / AI Assistants</h2>
-      <p>This section provides a ready-to-paste prompt and context block that you can hand to ChatGPT (or any AI assistant) to get help implementing real AI capabilities into this platform.</p>
-
-      <div class="ai-box">
-        <h3 class="purple">What the Platform Does (Summary for AI)</h3>
-        <p>Lumina is a Next.js 16 + Supabase AI teacher platform. A simulated AI teacher named <strong>Maya</strong> teaches students interactively. The platform has a working <strong>AI Classroom</strong> page at <code>app/(app)/classroom/page.tsx</code> with a full lesson state machine (teaching → question → evaluation → continue phases). Currently, all teacher responses (narration, questions, evaluations, re-explanations) are powered by a static <strong>MockTeacherEngine</strong> in <code>lib/teacher-engine.ts</code>.</p>
-        <p>The next goal is to replace or augment the MockTeacherEngine with <strong>real AI calls</strong> (e.g., using Google Gemini, OpenAI GPT-4, or similar) so that Maya's teaching content, questions, and evaluations are generated dynamically based on the student's chosen topic.</p>
-      </div>
-
-      <div class="ai-box">
-        <h3 class="purple">Where the AI Agent Is Supposed to Go</h3>
-        <ul>
-          <li><strong>Primary integration point:</strong> <code>lib/teacher-engine.ts</code> — Replace the <code>MockTeacherEngine</code> class methods (<code>getLessonById</code>, <code>evaluateAnswer</code>, <code>continueLesson</code>) with real API calls to an LLM.</li>
-          <li><strong>API route for AI calls:</strong> Create a new server-side API route (e.g., <code>app/api/teacher/route.ts</code>) that accepts lesson context and student input, calls the LLM, and returns structured JSON matching the <code>TeacherLesson</code> / <code>TeacherEvaluation</code> TypeScript types.</li>
-          <li><strong>Visual Blackboard payload:</strong> The LLM should also generate <code>visualPayload</code> — a markdown code block string that gets rendered in the Visual Blackboard panel next to Maya's avatar. This is already wired up in the UI and ready to receive dynamic content.</li>
-          <li><strong>Streaming support (optional):</strong> Maya's narration text (<code>teacherNarrative</code> state variable in the classroom component) can support streamed tokens from the LLM for a more live "typing" effect.</li>
-          <li><strong>Ask Teacher Panel:</strong> There is already a slide-over "Ask Teacher" panel (<code>components/app/ask-teacher-panel.tsx</code>) that is waiting to be wired up to an AI Q&amp;A endpoint.</li>
-        </ul>
-      </div>
-
-      <div class="ai-box">
-        <h3 class="purple">Ready-to-Paste ChatGPT Context Prompt</h3>
-        <p class="copy-note">↓ Copy everything inside the box below and paste it at the start of your ChatGPT conversation.</p>
-        <div class="prompt-box">
-I am building an AI teacher platform called Lumina using Next.js 16.3 (App Router), React 19, TypeScript, Tailwind CSS v4, and Supabase (PostgreSQL + Auth + Storage).
-
-The platform has an interactive AI Classroom page at `app/(app)/classroom/page.tsx`. An AI teacher named Maya teaches students through a lesson state machine with the following phases: teaching → question → answering → evaluating → reexplaining → continuing.
-
-Currently, all teacher content is served by a static MockTeacherEngine in `lib/teacher-engine.ts`. The TypeScript types that structure the data are:
-
-```typescript
-type TeacherLesson = {
-  id: TeacherLessonId
-  title: string
-  subtitle: string
-  objective: string
-  summary: string
-  keyPoints: string[]
-  teachingPrompt: string
-  visualPayload?: string        // Optional markdown/code block for Visual Blackboard panel
-  question: {
-    prompt: string
-    options: string[]
-    correctIndex: number
-    explanation: string
-    teacherPrompt: string
-    visualPayload?: string      // Optional code/diagram for the question phase
-  }
-  reexplanation: string
-  completionMessage: string
-}
-
-type TeacherEvaluation = {
-  isCorrect: boolean
-  feedback: string
-  correctAnswer: string
-  reexplanation: string
-  nextCta: string
-  visualPayload?: string        // Optional code/diagram shown during evaluation
-}
-```
-
-The classroom component has this state:
-- `phase` — current lesson phase (teaching / question / answering / evaluating / reexplaining / continuing)
-- `teacherNarrative` — the text Maya is currently speaking
-- `currentVisualPayload` — a string (markdown code block) rendered in a Visual Blackboard panel next to Maya's avatar
-- `evaluation` — a TeacherEvaluation object set after the student answers
-- `lesson` — the current TeacherLesson object
-
-The Visual Blackboard panel is already built and wired. It renders `currentVisualPayload` using `<pre><code>` blocks with whitespace-pre-wrap. It dynamically shows/hides based on whether `currentVisualPayload` is non-empty (using a 12-column CSS grid: Avatar col-span-5, Blackboard col-span-7).
-
-MY GOAL: I want to replace the MockTeacherEngine with a real AI (e.g., Google Gemini or OpenAI GPT-4o). Please help me:
-
-1. Design a server-side Next.js API route (`app/api/teacher/route.ts`) that accepts a topic/lesson request and returns a structured JSON matching the TeacherLesson type above.
-2. Design another API endpoint that accepts (lessonContext, studentAnswer) and returns a TeacherEvaluation JSON.
-3. Both endpoints must generate a `visualPayload` — a relevant markdown code block or text diagram that complements what Maya is teaching.
-4. Suggest how to wire these new API routes into the existing `TeacherEngine` interface in `lib/teacher-engine.ts` by creating a `RealTeacherEngine` class that implements the same interface methods but calls the API routes asynchronously.
-5. Optionally, suggest how to stream Maya's narration text to the `teacherNarrative` state for a live typing effect using Next.js streaming responses.
-
-The project uses `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` as environment variables. I can also add `OPENAI_API_KEY` or `GOOGLE_AI_API_KEY` to `.env.local`.
-        </div>
-      </div>
-
-      <div class="card highlight-card">
-        <h3>Key Files to Share with ChatGPT</h3>
-        <p>If ChatGPT asks for code context, share the contents of these files:</p>
-        <ul>
-          <li><code>lib/teacher-engine.ts</code> — full type definitions and MockTeacherEngine class</li>
-          <li><code>app/(app)/classroom/page.tsx</code> — lines 80–240 (state declarations + phase transition functions)</li>
-          <li><code>.env.local</code> — only the variable names (not the values!) so ChatGPT knows what secrets are available</li>
-        </ul>
-      </div>
-    </section>
-
-
-    <!-- ========== SECTION 10: ENV VARIABLES ========== -->
-    <section>
-      <h2>10. Environment Variables (.env.local)</h2>
-      <div class="card">
-        <table>
-          <thead>
-            <tr><th>Variable</th><th>Used By</th><th>Description</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><code>NEXT_PUBLIC_SUPABASE_URL</code></td>
-              <td>Browser &amp; Server</td>
-              <td>Supabase project URL (public)</td>
-            </tr>
-            <tr>
-              <td><code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></td>
-              <td>Browser &amp; Server</td>
-              <td>Supabase anonymous key (public, RLS enforced)</td>
-            </tr>
-            <tr>
-              <td><code>SUPABASE_SERVICE_ROLE_KEY</code></td>
-              <td>Server only</td>
-              <td>Admin key used only in <code>/api/auth/delete-account</code> — bypasses RLS</td>
-            </tr>
-            <tr>
-              <td><code>NEXTAUTH_SECRET</code></td>
-              <td>Server only</td>
-              <td>JWT signing secret for NextAuth sessions</td>
-            </tr>
-            <tr>
-              <td><code>NEXTAUTH_URL</code></td>
-              <td>Server only</td>
-              <td>Canonical URL for OAuth redirects (e.g., <code>http://localhost:3000</code>)</td>
-            </tr>
-            <tr>
-              <td><code>GOOGLE_CLIENT_ID / SECRET</code></td>
-              <td>Server only</td>
-              <td>Google OAuth 2.0 credentials</td>
-            </tr>
-            <tr>
-              <td><code>GITHUB_CLIENT_ID / SECRET</code></td>
-              <td>Server only</td>
-              <td>GitHub OAuth credentials</td>
-            </tr>
-          </tbody>
-        </table>
-        <p style="color: var(--warning); font-size: 0.85rem;">⚠ To add AI capabilities, you will also need to add <code>OPENAI_API_KEY</code> or <code>GOOGLE_AI_API_KEY</code> here.</p>
-      </div>
-    </section>
-
-
-    <footer>
-      <p>Lumina AI Teacher Platform — Technical Architecture Documentation — Updated September 2026</p>
-    </footer>
-
-  </div>
+</div>
 </body>
 </html>
