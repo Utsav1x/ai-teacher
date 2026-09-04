@@ -28,9 +28,6 @@ import { TeacherAvatar } from '@/components/app/teacher-avatar'
 import { LessonVideoButton } from '@/components/app/lesson-video-button'
 import { LessonVisual } from '@/components/app/lesson-visual'
 import { extractStrings, applyStrings } from '@/lib/ai/teacher/translate-lesson'
-
-/** Offered for mid-lesson switching. Hinglish is deliberately included. */
-const SWITCHABLE_LANGUAGES = ['English', 'Hindi', 'Hinglish', 'Marathi', 'Tamil', 'Bengali']
 import { useSpeech } from '@/lib/speech/use-speech'
 import type {
   AIEvaluation,
@@ -40,6 +37,9 @@ import type {
   LearnerPreferences,
   QuestionDifficulty,
 } from '@/lib/ai/types'
+
+/** Offered for mid-lesson switching. Hinglish is deliberately included. */
+const SWITCHABLE_LANGUAGES = ['English', 'Hindi', 'Hinglish', 'Marathi', 'Tamil', 'Bengali']
 
 /** One answered checkpoint, kept to drive difficulty and the weak-concept list. */
 type AnsweredCheckpoint = {
@@ -74,7 +74,7 @@ type LessonPhase =
   | 'reexplaining'
   | 'continuing'
 
-type ResponseMode = 'mcq' | 'freeform'
+type ResponseMode = 'mcq' | 'freeform' | 'teachback'
 
 type LoadState = 'loading' | 'ready' | 'error'
 
@@ -164,6 +164,7 @@ export default function ClassroomPage() {
   const [selected, setSelected] = useState<number | null>(null)
   const [shortAnswer, setShortAnswer] = useState('')
   const [showTranscript, setShowTranscript] = useState(false)
+  const [speechRate, setSpeechRate] = useState(0.95)
   const [showAskPanel, setShowAskPanel] = useState(false)
   const [resumePhase, setResumePhase] = useState<LessonPhase>('teaching')
   const [askDraft, setAskDraft] = useState('')
@@ -412,9 +413,10 @@ export default function ClassroomPage() {
   }
 
   // ── Narration ───────────────────────────────────────────────────────────────
-  // Follows the live language, not the one chosen at /start, so a mid-lesson
-  // switch changes the voice as well as the text.
-  const speech = useSpeech(language)
+  // Language follows the live selection rather than the one chosen at /start,
+  // so a mid-lesson switch changes the voice as well as the text. Rate is the
+  // learner's own narration-speed preference.
+  const speech = useSpeech(language, speechRate)
 
   /**
    * Restates the current lesson in another language without restarting it.
@@ -606,8 +608,8 @@ export default function ClassroomPage() {
 
   async function submitAnswer() {
     if (!lesson || !currentQuestion) return
-    if (isMcq && selected === null) return
-    if (!isMcq && shortAnswer.trim().length === 0) return
+    if (isMcq && responseMode === 'mcq' && selected === null) return
+    if (responseMode !== 'mcq' && shortAnswer.trim().length === 0) return
 
     setPhase('evaluating')
     setEvalError('')
@@ -620,7 +622,7 @@ export default function ClassroomPage() {
       questionPrompt: currentQuestion.prompt,
     }
 
-    if (isMcq) {
+    if (isMcq && responseMode === 'mcq') {
       payload.questionOptions = currentQuestion.options
       payload.correctIndex = currentQuestion.correctIndex
       payload.selectedIndex = selected
@@ -874,6 +876,21 @@ export default function ClassroomPage() {
               </div>
 
               <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+                <label className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-slate-900/60 px-3 text-xs text-slate-300 backdrop-blur-sm">
+                  <span className="sr-only">Narration speed</span>
+                  <select
+                    aria-label="Narration speed"
+                    value={speechRate}
+                    onChange={(event) => setSpeechRate(Number(event.target.value))}
+                    className="bg-transparent text-xs text-slate-200 outline-none"
+                  >
+                    <option value="0.7" className="bg-slate-900">0.7x</option>
+                    <option value="0.85" className="bg-slate-900">0.85x</option>
+                    <option value="0.95" className="bg-slate-900">1x</option>
+                    <option value="1.15" className="bg-slate-900">1.15x</option>
+                    <option value="1.3" className="bg-slate-900">1.3x</option>
+                  </select>
+                </label>
                 <Button
                   size="icon"
                   variant="secondary"
@@ -1064,7 +1081,7 @@ export default function ClassroomPage() {
 
                     {isMcq && (
                       <div className="flex flex-wrap gap-2">
-                        {(['mcq', 'freeform'] as ResponseMode[]).map((mode) => (
+                        {(['mcq', 'freeform', 'teachback'] as ResponseMode[]).map((mode) => (
                           <button
                             key={mode}
                             type="button"
@@ -1076,7 +1093,11 @@ export default function ClassroomPage() {
                                 : 'border-white/10 bg-white/5 text-slate-300',
                             )}
                           >
-                            {mode === 'mcq' ? 'Multiple choice' : 'Answer in your own words'}
+                            {mode === 'mcq'
+                              ? 'Multiple choice'
+                              : mode === 'teachback'
+                                ? 'Teach it back'
+                                : 'Answer in your own words'}
                           </button>
                         ))}
                       </div>
@@ -1107,7 +1128,9 @@ export default function ClassroomPage() {
                       <textarea
                         value={shortAnswer}
                         onChange={(e) => setShortAnswer(e.target.value)}
-                        placeholder="Answer in your own words..."
+                        placeholder={responseMode === 'teachback'
+                          ? 'Explain the concept as if you were teaching it to a friend...'
+                          : 'Answer in your own words...'}
                         className="min-h-28 w-full rounded-2xl border border-white/10 bg-slate-950/30 p-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/50"
                       />
                     )}
