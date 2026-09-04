@@ -69,7 +69,7 @@ type LessonPhase =
   | 'reexplaining'
   | 'continuing'
 
-type ResponseMode = 'mcq' | 'freeform'
+type ResponseMode = 'mcq' | 'freeform' | 'teachback'
 
 type LoadState = 'loading' | 'ready' | 'error'
 
@@ -538,8 +538,8 @@ export default function ClassroomPage() {
 
   async function submitAnswer() {
     if (!lesson || !currentQuestion) return
-    if (isMcq && selected === null) return
-    if (!isMcq && shortAnswer.trim().length === 0) return
+    if (isMcq && responseMode === 'mcq' && selected === null) return
+    if (responseMode !== 'mcq' && shortAnswer.trim().length === 0) return
 
     setPhase('evaluating')
     setEvalError('')
@@ -552,7 +552,7 @@ export default function ClassroomPage() {
       questionPrompt: currentQuestion.prompt,
     }
 
-    if (isMcq) {
+    if (isMcq && responseMode === 'mcq') {
       payload.questionOptions = currentQuestion.options
       payload.correctIndex = currentQuestion.correctIndex
       payload.selectedIndex = selected
@@ -1015,7 +1015,7 @@ export default function ClassroomPage() {
 
                     {isMcq && (
                       <div className="flex flex-wrap gap-2">
-                        {(['mcq', 'freeform'] as ResponseMode[]).map((mode) => (
+                        {(['mcq', 'freeform', 'teachback'] as ResponseMode[]).map((mode) => (
                           <button
                             key={mode}
                             type="button"
@@ -1027,7 +1027,11 @@ export default function ClassroomPage() {
                                 : 'border-white/10 bg-white/5 text-slate-300',
                             )}
                           >
-                            {mode === 'mcq' ? 'Multiple choice' : 'Answer in your own words'}
+                            {mode === 'mcq'
+                              ? 'Multiple choice'
+                              : mode === 'teachback'
+                                ? 'Teach it back'
+                                : 'Answer in your own words'}
                           </button>
                         ))}
                       </div>
@@ -1058,7 +1062,9 @@ export default function ClassroomPage() {
                       <textarea
                         value={shortAnswer}
                         onChange={(e) => setShortAnswer(e.target.value)}
-                        placeholder="Answer in your own words..."
+                        placeholder={responseMode === 'teachback'
+                          ? 'Explain the concept as if you were teaching it to a friend...'
+                          : 'Answer in your own words...'}
                         className="min-h-28 w-full rounded-2xl border border-white/10 bg-slate-950/30 p-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-cyan-400/50"
                       />
                     )}
