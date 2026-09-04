@@ -69,6 +69,7 @@ async function getUserLearningPath(userId: string): Promise<PathCourse[]> {
           title,
           description,
           order_index,
+          content,
           lesson_progress (
             status,
             progress_percentage,
@@ -93,6 +94,7 @@ async function getUserLearningPath(userId: string): Promise<PathCourse[]> {
         title: string
         description: string | null
         order_index: number
+        content: any
         lesson_progress: Array<{
           status: string
           progress_percentage: number
@@ -108,6 +110,8 @@ async function getUserLearningPath(userId: string): Promise<PathCourse[]> {
       .map((lesson) => {
         const progress = lesson.lesson_progress?.[0]
         const status   = (progress?.status ?? 'not_started') as LessonStatus
+        const engineKey = TITLE_TO_ENGINE_KEY[lesson.title] ?? lesson.content?.engineKey ?? lesson.id
+
         return {
           id:          lesson.id,
           title:       lesson.title,
@@ -115,7 +119,7 @@ async function getUserLearningPath(userId: string): Promise<PathCourse[]> {
           orderIndex:  lesson.order_index,
           status,
           progressPct: Number(progress?.progress_percentage ?? 0),
-          engineKey:   TITLE_TO_ENGINE_KEY[lesson.title] ?? null,
+          engineKey,
           completedAt: progress?.completed_at ?? null,
         }
       })

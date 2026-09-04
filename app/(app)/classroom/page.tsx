@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   AlertTriangle,
   Bot,
@@ -146,7 +146,17 @@ function readSession(): LessonSession {
 }
 
 export default function ClassroomPage() {
+  return (
+    <Suspense fallback={<div className="grid h-dvh place-items-center"><Loader2 className="size-8 animate-spin text-muted-foreground" /></div>}>
+      <ClassroomContent />
+    </Suspense>
+  )
+}
+
+function ClassroomContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const lessonIdParam = searchParams.get('lessonId')
 
   // ── Lesson data ─────────────────────────────────────────────────────────────
   const [loadState, setLoadState] = useState<LoadState>('loading')
@@ -222,7 +232,7 @@ export default function ClassroomPage() {
    * lessons have no predictable key — the route creates a `lessons` row for it.
    */
   const saveProgress = useCallback(
-    (status: 'in_progress' | 'completed', percentage: number, extra?: Record<string, unknown>) => {
+    (status: 'in_progress' | 'completed', percentage: number, extra?: Record<string, unknown>, includePayload?: boolean) => {
       const current = lessonRef.current
       if (!current) return
 
@@ -232,6 +242,7 @@ export default function ClassroomPage() {
         body: JSON.stringify({
           lessonKey: current.id,
           lessonTitle: current.title,
+          lessonPayload: includePayload ? current : undefined,
           status,
           progressPercentage: Math.round(percentage),
           timeSpentSeconds: Math.round((Date.now() - startedAtRef.current) / 1000),
@@ -302,7 +313,7 @@ export default function ClassroomPage() {
           setLoadState('ready')
         // Register the lesson as started so it shows on the dashboard even if
         // the learner leaves before finishing.
-        saveProgress('in_progress', 5)
+        saveProgress('in_progress', 5, undefined, true)
         setPlaying(true)
         setPaused(false)
       } catch (err) {
@@ -334,8 +345,12 @@ export default function ClassroomPage() {
         const parsed = JSON.parse(cached) as { signature?: string; lesson?: AILesson }
         if (parsed.signature === sessionSignature(s) && parsed.lesson?.sections?.length) {
           setLesson(parsed.lesson)
+          lessonRef.current = parsed.lesson
           setResponseMode(parsed.lesson.question?.type === 'Freeform' ? 'freeform' : 'mcq')
           setLoadState('ready')
+          saveProgress('in_progress', 5, undefined, true)
+          setPlaying(true)
+          setPaused(false)
           return
         }
       }
@@ -343,8 +358,44 @@ export default function ClassroomPage() {
       // fall through to generating
     }
 
+    // 1. If we have a lessonId, check the database for a persisted lesson payload.
+    if (lessonIdParam) {
+      fetch(`/api/progress/lesson?lessonKey=${encodeURIComponent(lessonIdParam)}`)
+        .then(res => res.json())
+        .then(data => {
+          const aiLesson = data?.progress?.lessons?.content?.aiLesson as AILesson | undefined
+          if (aiLesson && aiLesson.sections?.length) {
+            setLesson(aiLesson)
+            lessonRef.current = aiLesson
+            setResponseMode(aiLesson.question?.type === 'Freeform' ? 'freeform' : 'mcq')
+            setLoadState('ready')
+            setPlaying(true)
+            setPaused(false)
+            
+            // Restore previous progress if we have it
+            if (data.progress.progress_state) {
+              const state = data.progress.progress_state
+              if (typeof state.sectionIndex === 'number') setSectionIndex(state.sectionIndex)
+              if (typeof state.activeIndex === 'number') setActiveIndex(state.activeIndex)
+              if (Array.isArray(state.askedIndexes)) setAskedIndexes(state.askedIndexes)
+              if (Array.isArray(state.answered)) setAnswered(state.answered)
+              if (state.phase && ['teaching', 'question', 'evaluating'].includes(state.phase as string)) {
+                setPhase(state.phase as LessonPhase)
+              }
+            }
+          } else {
+            // No persisted payload found, generate new
+            void loadLesson(s.topic, s.preferences, 0, [], s.materialIds ?? [])
+          }
+        })
+        .catch(() => {
+          void loadLesson(s.topic, s.preferences, 0, [], s.materialIds ?? [])
+        })
+      return
+    }
+
     void loadLesson(s.topic, s.preferences, 0, [], s.materialIds ?? [])
-  }, [loadLesson])
+  }, [loadLesson, lessonIdParam])
 
   // ── Derived ─────────────────────────────────────────────────────────────────
   const sections = lesson?.sections ?? []

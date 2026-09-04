@@ -8,6 +8,7 @@ import {
   Play,
   Sparkles,
   TrendingUp,
+  Library,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -25,13 +26,13 @@ export const dynamic = 'force-dynamic'
 export default async function DashboardPage() {
   const session = await auth()
   const firstName = session?.user?.name?.split(' ')[0] ?? 'there'
-  const [currentCourse, completedLessons, averageAssessment, studyStreak, conceptsMastered, weeklyGoal] = await Promise.all([
-    getCurrentCourse(),
+  const [completedLessons, averageAssessment, studyStreak, conceptsMastered, weeklyGoal, recentLessons] = await Promise.all([
     getCompletedLessonCount(),
     getAverageAssessment(),
     getStudyStreak(),
     getConceptsMastered(),
     getWeeklyGoal(),
+    getRecentLessons(),
   ])
   const recommendedTopic = await getRecommendedTopic()
   // Built from the queried values directly. Matching real numbers onto a mock
@@ -107,10 +108,13 @@ export default async function DashboardPage() {
       </section>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Continue learning */}
-        <section aria-label="Continue learning" className="lg:col-span-2">
+        {/* Your Library (Recent Lessons) */}
+        <section aria-label="Your Library" className="lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Continue learning</h2>
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Library className="size-5 text-primary" />
+              Your Library
+            </h2>
             <Link
               href="/progress/path"
               className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -119,49 +123,50 @@ export default async function DashboardPage() {
               <ArrowRight className="size-4" />
             </Link>
           </div>
-          {currentCourse ? (
-            <Card className="transition-colors hover:border-primary/40">
-              <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary">
-                  <Play className="size-5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">
-                      {currentCourse.isDefault ? 'Demo path' : 'Your lessons'}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {currentCourse.completedLessons}/{currentCourse.totalLessons} lessons
-                    </span>
-                  </div>
-                  <h3 className="mt-2 truncate font-medium">{currentCourse.title}</h3>
-                  <div className="mt-3 flex items-center gap-3">
-                    <Progress value={currentCourse.progress} className="h-1.5" />
-                    <span className="w-10 shrink-0 text-right text-xs font-medium text-muted-foreground">
-                      {currentCourse.progress}%
-                    </span>
-                  </div>
-                </div>
-                <LinkButton
-                  href="/progress/path"
-                  variant="outline"
-                  size="lg"
-                  className="h-9 shrink-0 gap-1.5"
-                >
-                  View path
-                  <ArrowRight className="size-4" />
-                </LinkButton>
-              </CardContent>
-            </Card>
+          {recentLessons.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {recentLessons.map((lesson) => (
+                <Card key={lesson.id} className="transition-colors hover:border-primary/40 flex flex-col justify-between">
+                  <CardContent className="p-5 flex flex-col h-full gap-4">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <Badge variant="outline" className="shrink-0 text-xs">
+                          {lesson.status === 'completed' ? 'Completed' : 'In Progress'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground truncate">
+                          {lesson.updatedAt}
+                        </span>
+                      </div>
+                      <h3 className="font-medium line-clamp-2">{lesson.title}</h3>
+                      <div className="mt-3 flex items-center gap-3">
+                        <Progress value={lesson.progress} className="h-1.5" />
+                        <span className="w-8 shrink-0 text-right text-xs font-medium text-muted-foreground">
+                          {lesson.progress}%
+                        </span>
+                      </div>
+                    </div>
+                    <LinkButton
+                      href={`/classroom?lessonId=${encodeURIComponent(lesson.engineKey)}`}
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-1.5 mt-auto"
+                    >
+                      <Play className="size-3.5" />
+                      {lesson.status === 'completed' ? 'Review' : 'Resume'}
+                    </LinkButton>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           ) : (
             <Card>
               <CardContent className="flex flex-col items-start gap-3 p-5">
                 <p className="text-sm text-muted-foreground">
-                  No lessons yet. Start one and it will appear here with your progress.
+                  You haven't started any lessons yet. Start a new lesson and it will appear here.
                 </p>
                 <LinkButton href="/start" size="sm" className="gap-1.5">
                   <Play className="size-3.5" />
-                  Start your first lesson
+                  Start learning
                 </LinkButton>
               </CardContent>
             </Card>
@@ -169,7 +174,7 @@ export default async function DashboardPage() {
         </section>
 
         {/* Recommended */}
-        <section aria-label="Recommended topic" className="flex flex-col gap-6">
+        <section aria-label="Recommended topic" className="flex flex-col gap-6 lg:col-start-3 lg:row-start-1 lg:row-span-2">
           <h2 className="text-lg font-semibold">Recommended for you</h2>
           <Card className="relative overflow-hidden glow-border">
             <div className="pointer-events-none absolute -right-8 -top-8 size-32 rounded-full bg-primary/20 blur-2xl" />
@@ -216,72 +221,6 @@ export default async function DashboardPage() {
   )
 }
 
-/**
- * The course to surface on the dashboard.
- *
- * Prefers the learner's own generated lessons over the seeded demo path — the
- * previous version required `is_default`, so it could only ever show the demo
- * and returned nothing at all for a learner who had only ever taken generated
- * lessons.
- */
-async function getCurrentCourse() {
-  const supabase = await createSupabaseServerClient()
-  if (!supabase) return null
-
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  const { data } = await supabase
-    .from('user_courses')
-    .select(`
-      courses (
-        title,
-        is_default,
-        lessons (
-          lesson_progress (status, progress_percentage)
-        )
-      )
-    `)
-    .eq('user_id', user.id)
-
-  type CourseShape = {
-    title: string
-    is_default: boolean
-    lessons: Array<{
-      lesson_progress: Array<{ status: string; progress_percentage: number }>
-    }>
-  }
-
-  const courses = (data ?? [])
-    .map((row) => {
-      const c = row.courses as unknown as CourseShape | CourseShape[] | null
-      return Array.isArray(c) ? c[0] : c
-    })
-    .filter((c): c is CourseShape => !!c && (c.lessons?.length ?? 0) > 0)
-
-  if (courses.length === 0) return null
-
-  // A learner's own lessons matter more than the demo path.
-  const course = courses.find((c) => !c.is_default) ?? courses[0]!
-
-  const totalLessons = course.lessons.length
-  const completedLessons = course.lessons.filter((lesson) =>
-    lesson.lesson_progress?.[0]?.status === 'completed',
-  ).length
-  const totalProgress = course.lessons.reduce(
-    (sum, lesson) => sum + (lesson.lesson_progress?.[0]?.progress_percentage ?? 0),
-    0,
-  )
-
-  return {
-    title: course.title,
-    isDefault: course.is_default,
-    totalLessons,
-    completedLessons,
-    progress: Math.round(totalProgress / totalLessons),
-  }
-}
-
 async function getCompletedLessonCount() {
   const supabase = await createSupabaseServerClient()
   if (!supabase) return 0
@@ -296,6 +235,46 @@ async function getCompletedLessonCount() {
     .eq('status', 'completed')
 
   return count ?? 0
+}
+
+async function getRecentLessons() {
+  const supabase = await createSupabaseServerClient()
+  if (!supabase) return []
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data } = await supabase
+    .from('lesson_progress')
+    .select(`
+      status,
+      progress_percentage,
+      updated_at,
+      lessons!inner (
+        id,
+        title,
+        is_default,
+        content
+      )
+    `)
+    .eq('user_id', user.id)
+    .order('updated_at', { ascending: false })
+    .limit(4)
+
+  if (!data) return []
+
+  return data.map((row) => {
+    // @ts-expect-error Supabase types for JSONB columns are often opaque
+    const engineKey = row.lessons.content?.engineKey ?? row.lessons.id
+    return {
+      id: row.lessons.id,
+      title: row.lessons.title,
+      status: row.status,
+      progress: Math.round(row.progress_percentage),
+      updatedAt: new Date(row.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      engineKey,
+    }
+  })
 }
 
 async function getAverageAssessment() {
