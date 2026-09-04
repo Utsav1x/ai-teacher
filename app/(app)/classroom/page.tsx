@@ -876,21 +876,18 @@ export default function ClassroomPage() {
               </div>
 
               <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
-                <label className="flex h-9 items-center gap-2 rounded-full border border-white/10 bg-slate-900/60 px-3 text-xs text-slate-300 backdrop-blur-sm">
-                  <span className="sr-only">Narration speed</span>
-                  <select
-                    aria-label="Narration speed"
-                    value={speechRate}
-                    onChange={(event) => setSpeechRate(Number(event.target.value))}
-                    className="bg-transparent text-xs text-slate-200 outline-none"
-                  >
-                    <option value="0.7" className="bg-slate-900">0.7x</option>
-                    <option value="0.85" className="bg-slate-900">0.85x</option>
-                    <option value="0.95" className="bg-slate-900">1x</option>
-                    <option value="1.15" className="bg-slate-900">1.15x</option>
-                    <option value="1.3" className="bg-slate-900">1.3x</option>
-                  </select>
-                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const speeds = [0.7, 0.85, 0.95, 1.15, 1.3]
+                    const nextIndex = (speeds.indexOf(speechRate) + 1) % speeds.length
+                    setSpeechRate(speeds[nextIndex] ?? 0.95)
+                  }}
+                  className="flex h-9 items-center gap-1.5 rounded-full border border-white/10 bg-slate-900/60 px-3 text-xs font-medium text-slate-300 backdrop-blur-sm transition-colors hover:bg-slate-800 hover:text-slate-100"
+                  aria-label={`Narration speed, currently ${speechRate === 0.95 ? '1x' : speechRate + 'x'}`}
+                >
+                  {speechRate === 0.95 ? '1x' : `${speechRate}x`} Speed
+                </button>
                 <Button
                   size="icon"
                   variant="secondary"
