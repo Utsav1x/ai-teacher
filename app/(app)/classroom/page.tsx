@@ -761,7 +761,7 @@ export default function ClassroomPage() {
   // ── Loading / error gates ───────────────────────────────────────────────────
   if (loadState === 'loading') {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 rounded-[28px] border border-white/10 bg-[#081522] p-10 text-center">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 rounded-[28px] border border-white/10 bg-slate-950/40 p-10 text-center">
         <div className="relative flex size-20 items-center justify-center rounded-full border border-cyan-300/35 bg-gradient-to-br from-cyan-400/20 to-slate-900/80">
           <div className="absolute inset-0 animate-ping rounded-full border border-cyan-400/40" />
           <Bot className="size-8 text-cyan-300" />
@@ -780,7 +780,7 @@ export default function ClassroomPage() {
 
   if (loadState === 'error' || !lesson) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 rounded-[28px] border border-red-500/20 bg-[#150c0c] p-10 text-center">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 rounded-[28px] border border-red-500/20 bg-red-950/20 p-10 text-center">
         <div className="flex size-14 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10">
           <AlertTriangle className="size-6 text-red-300" />
         </div>
