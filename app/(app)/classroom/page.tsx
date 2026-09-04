@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { TeacherAvatar } from '@/components/app/teacher-avatar'
 import { LessonVideoButton } from '@/components/app/lesson-video-button'
+import { LessonVideoPlayer } from '@/components/app/lesson-video-player'
 import { LessonVisual } from '@/components/app/lesson-visual'
 import { extractStrings, applyStrings } from '@/lib/ai/teacher/translate-lesson'
 import { useSpeech } from '@/lib/speech/use-speech'
@@ -197,6 +198,10 @@ function ClassroomContent() {
   const [targetDifficulty, setTargetDifficulty] = useState<QuestionDifficulty>('core')
   /** Concepts the student got wrong — carried into the next lesson's prompt. */
   const [weakConcepts, setWeakConcepts] = useState<string[]>([])
+
+  // ── AI video player ─────────────────────────────────────────────────────────
+  /** Set to true when the AI video player reaches a question checkpoint. */
+  const [videoReachedQuestion, setVideoReachedQuestion] = useState(false)
 
   // ── Mid-lesson language switching ───────────────────────────────────────────
   const [language, setLanguage] = useState<string>('English')
@@ -1527,7 +1532,34 @@ function ClassroomContent() {
 
           <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950/30 p-3">
             <p className="mb-2 text-xs uppercase tracking-[0.16em] text-slate-400">
-              Teaching video
+              AI Teaching Video
+            </p>
+            <LessonVideoPlayer
+              lesson={lesson}
+              language={language}
+              onBeforeGenerate={speech.stop}
+              onQuestionReached={(qIdx) => {
+                setVideoReachedQuestion(true)
+                // Pick the corresponding question and start the question phase.
+                const qPool = lesson.questions?.length ? lesson.questions : [lesson.question]
+                const target = qPool.findIndex((_, i) => i === qIdx)
+                const targetIdx = target >= 0 ? target : 0
+                setActiveIndex(targetIdx)
+                setAskedIndexes((prev) =>
+                  prev.includes(targetIdx) ? prev : [...prev, targetIdx],
+                )
+                setResponseMode(qPool[targetIdx]?.type === 'Freeform' ? 'freeform' : 'mcq')
+                setPhase('question')
+              }}
+              onVideoEnd={() => {
+                setVideoReachedQuestion(false)
+                setPhase('continuing')
+              }}
+            />
+          </div>
+          <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-slate-400">
+              Download as video file
             </p>
             <LessonVideoButton
               lesson={lesson}
