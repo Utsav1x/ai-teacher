@@ -16,15 +16,14 @@ import { LinkButton } from '@/components/ui/link-button'
 import { PageHeader } from '@/components/app/page-header'
 import { auth } from '@/auth'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { MockTeacherEngine } from '@/lib/teacher-engine'
-import type { TeacherLessonId } from '@/lib/teacher-engine'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type AreaStat = { area: string; mastery: number }
 type ReportRow = {
   id: string
-  lesson_key: TeacherLessonId
+  lesson_id: string | null
+  lesson_key: string
   score: number
   correct: number
   total: number
@@ -53,6 +52,58 @@ async function getLatestReport(userId: string): Promise<ReportRow | null> {
   return data as ReportRow
 }
 
+/**
+ * Real title for the lesson this report covers.
+ *
+ * Generated lessons get a `lessons` row when progress is first saved, so the
+ * id on the report resolves to the title the student actually saw.
+ */
+async function getLessonTitle(report: ReportRow): Promise<string> {
+  const supabase = await createSupabaseServerClient()
+  if (!supabase || !report.lesson_id) return 'Your lesson'
+
+  const { data } = await supabase
+    .from('lessons')
+    .select('title')
+    .eq('id', report.lesson_id)
+    .maybeSingle()
+
+  return (data?.title as string | undefined) ?? 'Your lesson'
+}
+
+/**
+ * What to study next, taken from the lesson the student has most recently
+ * started but not finished — rather than a hardcoded curriculum.
+ */
+async function getNextLesson(
+  userId: string,
+  currentLessonId: string | null,
+): Promise<{ title: string; description: string } | null> {
+  const supabase = await createSupabaseServerClient()
+  if (!supabase) return null
+
+  const { data } = await supabase
+    .from('lesson_progress')
+    .select('lesson_id, status, updated_at, lessons(title, description)')
+    .eq('user_id', userId)
+    .neq('status', 'completed')
+    .order('updated_at', { ascending: false })
+    .limit(4)
+
+  const rows = (data ?? []) as Array<{
+    lesson_id: string
+    lessons?: { title?: string; description?: string } | null
+  }>
+
+  const candidate = rows.find((r) => r.lesson_id !== currentLessonId && r.lessons?.title)
+  if (!candidate?.lessons?.title) return null
+
+  return {
+    title: candidate.lessons.title,
+    description: candidate.lessons.description ?? 'Pick up where you left off.',
+  }
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function LearningReportPage() {
@@ -60,19 +111,9 @@ export default async function LearningReportPage() {
   const userId  = session?.user?.id
 
   const report  = userId ? await getLatestReport(userId) : null
-  const engine  = new MockTeacherEngine()
 
-  // If we have a real report, derive next-lesson info from the engine
-  const nextLesson = report
-    ? await (async () => {
-        try {
-          const cont = await engine.continueLesson(report.lesson_key)
-          return cont.nextLessonId ? await engine.getLessonById(cont.nextLessonId) : null
-        } catch {
-          return null
-        }
-      })()
-    : null
+  const nextLesson =
+    report && userId ? await getNextLesson(userId, report.lesson_id) : null
 
   const hasWeak = (report?.weak?.length ?? 0) > 0
 
@@ -116,10 +157,7 @@ export default async function LearningReportPage() {
   }
 
   const scorePct = report.score
-  const lessonTitle = await (async () => {
-    try { return (await engine.getLessonById(report.lesson_key)).title }
-    catch { return 'Your lesson' }
-  })()
+  const lessonTitle = await getLessonTitle(report)
 
   // ── Report view ──
   return (
@@ -263,7 +301,7 @@ export default async function LearningReportPage() {
             </div>
             <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
               <p className="text-lg font-semibold">{nextLesson.title}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{nextLesson.objective}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{nextLesson.description}</p>
             </div>
           </CardContent>
         </Card>

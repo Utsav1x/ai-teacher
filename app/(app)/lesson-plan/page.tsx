@@ -25,6 +25,28 @@ import type { AILesson, AILessonSection, LearnerPreferences } from '@/lib/ai/typ
 const SESSION_KEY = 'lumina_lesson_session'
 const LESSON_CACHE_KEY = 'lumina_active_lesson'
 
+/**
+ * Identifies what a cached lesson was generated for.
+ *
+ * Everything the learner can change must be in here. Keying on topic alone
+ * meant switching from Hindi to English on the same topic silently reused the
+ * Hindi lesson — the badges said English while every word was Hindi.
+ */
+function sessionSignature(s: {
+  topic: string
+  materialIds?: string[]
+  preferences: LearnerPreferences
+}): string {
+  return [
+    s.topic.trim(),
+    s.preferences.language,
+    s.preferences.level,
+    s.preferences.goal,
+    s.preferences.timeMinutes,
+    [...(s.materialIds ?? [])].sort().join(','),
+  ].join('|')
+}
+
 type LessonSession = {
   topic: string
   /** Uploaded material ids. Retrieval is skipped entirely when this is empty. */
@@ -110,7 +132,7 @@ export default function LessonPlanPage() {
       try {
         sessionStorage.setItem(
           LESSON_CACHE_KEY,
-          JSON.stringify({ topic: s.topic, lesson: generated }),
+          JSON.stringify({ signature: sessionSignature(s), lesson: generated }),
         )
       } catch {
         // sessionStorage unavailable — the classroom will regenerate instead.
@@ -133,12 +155,12 @@ export default function LessonPlanPage() {
     const s = readSession()
     setSession(s)
 
-    // Reuse a cached plan for the same topic rather than paying for generation twice.
+    // Reuse a cached plan only when every learner choice still matches.
     try {
       const cached = sessionStorage.getItem(LESSON_CACHE_KEY)
       if (cached) {
-        const parsed = JSON.parse(cached) as { topic?: string; lesson?: AILesson }
-        if (parsed.topic === s.topic && parsed.lesson?.sections?.length) {
+        const parsed = JSON.parse(cached) as { signature?: string; lesson?: AILesson }
+        if (parsed.signature === sessionSignature(s) && parsed.lesson?.sections?.length) {
           setLesson(parsed.lesson)
           setState('ready')
           return

@@ -84,6 +84,21 @@ const SESSION_KEY = 'lumina_lesson_session'
 /** Written by /lesson-plan so the classroom does not regenerate the same lesson. */
 const LESSON_CACHE_KEY = 'lumina_active_lesson'
 
+/**
+ * Must match sessionSignature in /lesson-plan — a cached lesson is only valid
+ * while every learner choice behind it is unchanged, language included.
+ */
+function sessionSignature(s: LessonSession): string {
+  return [
+    s.topic.trim(),
+    s.preferences.language,
+    s.preferences.level,
+    s.preferences.goal,
+    s.preferences.timeMinutes,
+    [...(s.materialIds ?? [])].sort().join(','),
+  ].join('|')
+}
+
 const DEFAULT_SESSION: LessonSession = {
   topic: 'Introduction to Neural Networks',
   preferences: {
@@ -304,8 +319,8 @@ export default function ClassroomPage() {
     try {
       const cached = sessionStorage.getItem(LESSON_CACHE_KEY)
       if (cached) {
-        const parsed = JSON.parse(cached) as { topic?: string; lesson?: AILesson }
-        if (parsed.topic === s.topic && parsed.lesson?.sections?.length) {
+        const parsed = JSON.parse(cached) as { signature?: string; lesson?: AILesson }
+        if (parsed.signature === sessionSignature(s) && parsed.lesson?.sections?.length) {
           setLesson(parsed.lesson)
           setResponseMode(parsed.lesson.question?.type === 'Freeform' ? 'freeform' : 'mcq')
           setLoadState('ready')
