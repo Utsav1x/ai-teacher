@@ -203,9 +203,9 @@ export function LessonVideoButton({
           <button
             type="button"
             onClick={() => abortRef.current?.abort()}
-            className="mt-2 inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300"
+            className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-cyan-400/20 bg-cyan-500/10 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-500/20"
           >
-            <X className="size-3" />
+            <X className="size-3.5" />
             Stop early
           </button>
         </div>
