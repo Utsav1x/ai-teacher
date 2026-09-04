@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { LinkButton } from '@/components/ui/link-button'
 import { PageHeader } from '@/components/app/page-header'
 import { StartTopicButton } from '@/components/app/start-topic-button'
+import { AdjustGoalButton } from '@/components/app/adjust-goal-button'
 import { auth } from '@/auth'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
@@ -206,9 +207,7 @@ export default async function DashboardPage() {
               <p className="text-sm text-muted-foreground">
                 {formatStudyTime(weeklyGoal.completedMinutes)} of {formatStudyTime(weeklyGoal.goalMinutes)} completed this week.
               </p>
-              <Button variant="outline" className="mt-1 w-full justify-center" disabled>
-                Adjust goal (Coming soon)
-              </Button>
+              <AdjustGoalButton currentGoal={weeklyGoal.goalMinutes} />
             </CardContent>
           </Card>
         </section>
@@ -458,10 +457,10 @@ async function getConceptsMastered() {
 
 async function getWeeklyGoal() {
   const supabase = await createSupabaseServerClient()
-  if (!supabase) return { completedMinutes: 0, progress: 0 }
+  if (!supabase) return { completedMinutes: 0, progress: 0, goalMinutes: 300 }
 
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { completedMinutes: 0, progress: 0 }
+  if (!user) return { completedMinutes: 0, progress: 0, goalMinutes: 300 }
 
   const today = new Date()
   const daysSinceMonday = (today.getUTCDay() + 6) % 7
@@ -480,7 +479,7 @@ async function getWeeklyGoal() {
     0,
   )
 
-  const goalMinutes = 300 // 5 hours
+  const goalMinutes = user.user_metadata?.weekly_goal_minutes || 300
 
   return {
     completedMinutes,
