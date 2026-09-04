@@ -1,3 +1,6 @@
+allowBuilds:
+  # Ships a prebuilt dist/; its install script is not needed to use the package.
+  msedge-tts: false
 minimumReleaseAgeExclude:
   - '@next/*'
   - next
