@@ -13,3 +13,13 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+
+# Build caches — regenerated on every compile, pure diff noise when tracked
+tsconfig.tsbuildinfo
+
+# SQLite write-ahead sidecar files, recreated by the database at runtime
+lumina.db-shm
+lumina.db-wal
+
+# Local editor/tooling config
+.claude/
