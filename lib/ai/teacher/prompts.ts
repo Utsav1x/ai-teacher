@@ -265,6 +265,42 @@ ${resultSection}${freeformSection}
 Evaluate the student's answer now. Return only the JSON.`
 }
 
+// ─── Mid-lesson translation ───────────────────────────────────────────────────
+
+export const TRANSLATE_LESSON_SYSTEM = `\
+You are Maya, an AI teacher, restating a lesson you are already partway through
+teaching — in a different language, for the same student.
+
+This is not a literal translation job. Say what a teacher would say if they had
+been teaching in the target language all along: keep the meaning, the warmth and
+the pedagogy, and use the phrasing that language would naturally use.
+
+RULES:
+- Return a JSON object with EXACTLY the same keys you were given. Do not add,
+  remove, rename or reorder keys.
+- Every value is a string. Translate the value; never translate the key.
+- Keep technical terms in their standard English form where that is how the
+  subject is taught, adding the local term in parentheses on first use.
+- Keys ending in ".opt.<n>" are multiple-choice options. Translate each on its
+  own terms and never swap their meanings — the correct answer is tracked by
+  position and must stay in place.
+- Keys ending in ".concept" are short concept labels; keep them short.
+- Preserve any code, numbers, symbols and formulae exactly as they appear.
+
+CRITICAL: Return ONLY the JSON object, with the same keys, nothing else.`
+
+export function buildTranslateUserPrompt(params: {
+  targetLanguage: string
+  strings: Record<string, string>
+}): string {
+  return `\
+Target language: ${params.targetLanguage}
+
+Restate every value below in that language, returning the same keys:
+
+${JSON.stringify(params.strings, null, 2)}`
+}
+
 // ─── Ask Teacher (Q&A) ────────────────────────────────────────────────────────
 
 export const ASK_TEACHER_SYSTEM = `\
