@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { createPortal } from 'react-dom'
 import { LogOut, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -68,9 +69,9 @@ function UserCard() {
         <LogOut className="size-4" />
       </button>
 
-      {isConfirmingLogout && (
+      {isConfirmingLogout && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-sm border-border/80 bg-[#111827]/95 p-0 shadow-2xl">
+          <Card className="w-full max-w-sm border-border/80 bg-slate-950/95 p-0 shadow-2xl">
             <div className="p-6">
               <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">
                 Confirm sign out
@@ -105,7 +106,8 @@ function UserCard() {
               </div>
             </div>
           </Card>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
