@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   recordLessonVideo,
+  extensionForMimeType,
   type LessonVideoSegment,
 } from '@/lib/video/lesson-recorder'
 import type { AILesson } from '@/lib/ai/types'
@@ -85,12 +86,18 @@ export function LessonVideoButton({
   const [progress, setProgress] = useState(0)
   const [label, setLabel] = useState('')
   const [error, setError] = useState('')
-  const [result, setResult] = useState<{ url: string; hasAudio: boolean } | null>(null)
+  const [result, setResult] = useState<{
+    url: string
+    hasAudio: boolean
+    extension: string
+    seconds: number
+    wasBackgrounded: boolean
+  } | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
 
   const start = useCallback(
-    async (withAudio: boolean) => {
+    async (audioMode: 'generated' | 'tab' | 'silent') => {
       onBeforeRecord?.()
       setError('')
       setResult(null)
@@ -101,12 +108,12 @@ export function LessonVideoButton({
       abortRef.current = controller
 
       try {
-        const { blob, hasAudio } = await recordLessonVideo({
+        const { blob, hasAudio, durationMs, wasBackgrounded } = await recordLessonVideo({
           lessonTitle: lesson.title,
           language,
           segments: buildSegments(lesson),
           voice,
-          withAudio,
+          audioMode,
           signal: controller.signal,
           onProgress: (fraction, current) => {
             setProgress(fraction)
@@ -114,7 +121,13 @@ export function LessonVideoButton({
           },
         })
 
-        setResult({ url: URL.createObjectURL(blob), hasAudio })
+        setResult({
+          url: URL.createObjectURL(blob),
+          hasAudio,
+          extension: extensionForMimeType(blob.type),
+          seconds: Math.round(durationMs / 1000),
+          wasBackgrounded,
+        })
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Recording failed.')
       } finally {
@@ -125,7 +138,9 @@ export function LessonVideoButton({
     [lesson, language, voice, onBeforeRecord],
   )
 
-  const filename = `${lesson.title.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'lesson'}.webm`
+  const slug =
+    lesson.title.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'lesson'
+  const filename = `${slug}.${result?.extension ?? 'mp4'}`
 
   return (
     <div className={cn('flex flex-col gap-2', className)}>
@@ -133,18 +148,31 @@ export function LessonVideoButton({
         <div className="flex flex-col gap-1.5">
           <Button
             className="w-full gap-2 bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
-            onClick={() => void start(true)}
+            onClick={() => void start('generated')}
           >
             <Video className="size-4" />
             Generate lesson video
           </Button>
-          <button
-            type="button"
-            onClick={() => void start(false)}
-            className="text-[11px] text-slate-500 transition-colors hover:text-slate-300"
-          >
-            Record without audio (no permission prompt)
-          </button>
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            Narration is generated as audio and written straight into the file — no screen
+            sharing, and the voice sounds the same on any device.
+          </p>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
+            <button
+              type="button"
+              onClick={() => void start('tab')}
+              className="text-[11px] text-slate-500 transition-colors hover:text-slate-300"
+            >
+              Use tab audio instead
+            </button>
+            <button
+              type="button"
+              onClick={() => void start('silent')}
+              className="text-[11px] text-slate-500 transition-colors hover:text-slate-300"
+            >
+              Silent (captions only)
+            </button>
+          </div>
         </div>
       )}
 
@@ -179,11 +207,22 @@ export function LessonVideoButton({
             controls
             className="w-full rounded-xl border border-white/10"
           />
+          <p className="text-[11px] text-slate-400">
+            {Math.floor(result.seconds / 60)}:{String(result.seconds % 60).padStart(2, '0')} ·{' '}
+            {result.extension.toUpperCase()} · {result.hasAudio ? 'with narration' : 'silent'}
+          </p>
+
+          {result.wasBackgrounded && (
+            <p className="text-[11px] leading-relaxed text-amber-200/90">
+              The tab lost focus while recording, so the video may be choppy. Browsers throttle
+              background tabs — keep this tab visible for a smooth result.
+            </p>
+          )}
+
           {!result.hasAudio && (
             <p className="text-[11px] leading-relaxed text-amber-200/90">
-              Recorded without audio — captions are burned into every frame. To include
-              narration, use “Generate lesson video” and tick <strong>Share tab audio</strong>
-              in the browser prompt.
+              Recorded without audio — captions are burned into every frame, so the lesson
+              still reads end to end.
             </p>
           )}
           <div className="flex gap-2">
