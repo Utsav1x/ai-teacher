@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import {
   AudioLines,
@@ -31,6 +30,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { LinkButton } from '@/components/ui/link-button'
 import { Card, CardContent } from '@/components/ui/card'
 import { PageHeader } from '@/components/app/page-header'
 
@@ -84,9 +84,14 @@ export default function FeaturesPage() {
         title="Your learning system, expanded"
         description="Explore every way Lumina can help you understand, practice, and remember more."
         actions={
-          <Button asChild size="lg" className="h-10 gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground">
-            <Link href="/start"><Sparkles className="size-4" />Start a lesson</Link>
-          </Button>
+          <LinkButton
+            href="/start"
+            size="lg"
+            className="h-10 gap-2 bg-gradient-to-r from-primary to-accent text-primary-foreground"
+          >
+            <Sparkles className="size-4" />
+            Start a lesson
+          </LinkButton>
         }
       />
 
@@ -142,9 +147,15 @@ export default function FeaturesPage() {
                     </span>
                     {isEnabled ? 'Active' : 'Add tool'}
                   </button>
-                  <Button asChild variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs">
-                    <Link href={feature.href}>{feature.action}<ChevronRight className="size-3.5" /></Link>
-                  </Button>
+                  <LinkButton
+                    href={feature.href}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 px-2 text-xs"
+                  >
+                    {feature.action}
+                    <ChevronRight className="size-3.5" />
+                  </LinkButton>
                 </div>
               </CardContent>
             </Card>

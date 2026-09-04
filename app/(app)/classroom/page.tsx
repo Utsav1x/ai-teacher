@@ -26,6 +26,8 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { TeacherAvatar } from '@/components/app/teacher-avatar'
 import { LessonVideoButton } from '@/components/app/lesson-video-button'
+import { LessonVisual } from '@/components/app/lesson-visual'
+import { extractStrings, applyStrings } from '@/lib/ai/teacher/translate-lesson'
 import { useSpeech } from '@/lib/speech/use-speech'
 import type {
   AIEvaluation,
@@ -35,6 +37,9 @@ import type {
   LearnerPreferences,
   QuestionDifficulty,
 } from '@/lib/ai/types'
+
+/** Offered for mid-lesson switching. Hinglish is deliberately included. */
+const SWITCHABLE_LANGUAGES = ['English', 'Hindi', 'Hinglish', 'Marathi', 'Tamil', 'Bengali']
 
 /** One answered checkpoint, kept to drive difficulty and the weak-concept list. */
 type AnsweredCheckpoint = {
@@ -183,6 +188,11 @@ export default function ClassroomPage() {
   /** Concepts the student got wrong — carried into the next lesson's prompt. */
   const [weakConcepts, setWeakConcepts] = useState<string[]>([])
 
+  // ── Mid-lesson language switching ───────────────────────────────────────────
+  const [language, setLanguage] = useState<string>('English')
+  const [switchingTo, setSwitchingTo] = useState<string | null>(null)
+  const [languageError, setLanguageError] = useState('')
+
   const requestRef = useRef(0)
   /** Wall-clock start, so completed lessons report real study minutes. */
   const startedAtRef = useRef(Date.now())
@@ -314,6 +324,7 @@ export default function ClassroomPage() {
 
     const s = readSession()
     setSession(s)
+    setLanguage(s.preferences.language)
 
     // /lesson-plan already generated this lesson — reuse it rather than paying
     // the ~30s generation cost a second time.
@@ -402,7 +413,66 @@ export default function ClassroomPage() {
   }
 
   // ── Narration ───────────────────────────────────────────────────────────────
-  const speech = useSpeech(session.preferences.language, speechRate)
+  // Language follows the live selection rather than the one chosen at /start,
+  // so a mid-lesson switch changes the voice as well as the text. Rate is the
+  // learner's own narration-speed preference.
+  const speech = useSpeech(language, speechRate)
+
+  /**
+   * Restates the current lesson in another language without restarting it.
+   *
+   * Only the text changes: the section you are on, the checkpoints you have
+   * answered, your score, the difficulty you have reached and the weak concepts
+   * recorded so far all carry over. Question options are translated in place,
+   * so the correct answer stays correct.
+   */
+  async function switchLanguage(target: string) {
+    if (!lesson || target === language || switchingTo) return
+
+    setSwitchingTo(target)
+    setLanguageError('')
+    speech.stop()
+
+    try {
+      const res = await fetch('/api/teacher/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetLanguage: target,
+          strings: extractStrings(lesson),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setLanguageError(data?.error ?? `Could not switch language (HTTP ${res.status}).`)
+        return
+      }
+
+      const translated = applyStrings(lesson, data.strings ?? {})
+      setLesson(translated)
+      lessonRef.current = translated
+      setLanguage(target)
+
+      // Keep the cache honest so a reload does not revert to the old language.
+      try {
+        sessionStorage.setItem(
+          LESSON_CACHE_KEY,
+          JSON.stringify({
+            signature: sessionSignature({ ...session, preferences: { ...session.preferences, language: target } }),
+            lesson: translated,
+          }),
+        )
+      } catch {
+        // Non-fatal — the lesson in memory is already switched.
+      }
+    } catch (err) {
+      setLanguageError(err instanceof Error ? err.message : 'Could not reach the AI teacher.')
+    } finally {
+      setSwitchingTo(null)
+    }
+  }
 
   /** The full text Maya speaks for the current phase. */
   const narration = useMemo(() => {
@@ -755,7 +825,7 @@ export default function ClassroomPage() {
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <Badge className="gap-1.5 bg-primary/15 text-primary">Live lesson</Badge>
                   <span className="text-xs uppercase tracking-[0.2em] text-slate-400">{lesson.subtitle}</span>
-                  <Badge className="bg-white/5 text-slate-300">{session.preferences.language}</Badge>
+                  <Badge className="bg-white/5 text-slate-300">{language}</Badge>
                   <Badge className="bg-white/5 text-slate-300">{session.preferences.level}</Badge>
                 </div>
                 <h1 className="text-xl font-semibold text-white sm:text-2xl">{lesson.title}</h1>
@@ -851,7 +921,7 @@ export default function ClassroomPage() {
                 )}
                 {speech.supported && speech.languageUnavailable && (
                   <p className="rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1 text-xs text-amber-200">
-                    No {session.preferences.language} voice installed on this device — narration
+                    No {language} voice installed on this device — narration
                     will use the default voice.
                   </p>
                 )}
@@ -922,16 +992,12 @@ export default function ClassroomPage() {
                     </div>
 
                     {lessonVisual && (
-                      <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60">
-                        {lessonVisual.language && (
-                          <div className="border-b border-white/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                            {lessonVisual.language}
-                          </div>
-                        )}
-                        <pre className="overflow-x-auto p-4 text-xs leading-relaxed text-cyan-100">
-                          {lessonVisual.body}
-                        </pre>
-                      </div>
+                      <LessonVisual
+                        body={lessonVisual.body}
+                        language={lessonVisual.language}
+                        visualType={lesson.visualType}
+                        rationale={lesson.visualRationale}
+                      />
                     )}
 
                     <div className="grid gap-3 sm:grid-cols-3">
@@ -1361,8 +1427,51 @@ export default function ClassroomPage() {
             </div>
             <Progress value={progressPct} className="h-2 bg-slate-800" />
             <p className="mt-2 text-xs text-slate-500">
-              Lesson {lessonIndex + 1} · {session.preferences.timeMinutes} min · {session.preferences.language}
+              Lesson {lessonIndex + 1} · {session.preferences.timeMinutes} min · {language}
             </p>
+          </div>
+
+          {/* Mid-lesson language switching */}
+          <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-slate-400">
+              Teaching language
+            </p>
+
+            <div className="flex flex-wrap gap-1.5">
+              {SWITCHABLE_LANGUAGES.map((lang) => {
+                const active = lang === language
+                const busy = switchingTo === lang
+                return (
+                  <button
+                    key={lang}
+                    type="button"
+                    disabled={!!switchingTo}
+                    onClick={() => void switchLanguage(lang)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-50',
+                      active
+                        ? 'border-cyan-400/50 bg-cyan-500/10 text-cyan-100'
+                        : 'border-white/10 bg-white/5 text-slate-300 hover:border-cyan-400/30',
+                    )}
+                  >
+                    {busy && <Loader2 className="size-3 animate-spin" />}
+                    {lang}
+                  </button>
+                )
+              })}
+            </div>
+
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+              {switchingTo
+                ? `Maya is switching to ${switchingTo}…`
+                : 'Switches mid-lesson. Your section, score and answered checkpoints carry over.'}
+            </p>
+
+            {languageError && (
+              <p className="mt-2 rounded-xl border border-red-500/20 bg-red-500/5 px-2.5 py-1.5 text-[11px] text-red-200">
+                {languageError}
+              </p>
+            )}
           </div>
 
           <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950/30 p-3">
@@ -1371,7 +1480,7 @@ export default function ClassroomPage() {
             </p>
             <LessonVideoButton
               lesson={lesson}
-              language={session.preferences.language}
+              language={language}
               voice={speech.voice}
               onBeforeRecord={speech.stop}
             />

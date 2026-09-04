@@ -27,6 +27,16 @@ interface LessonVideoButtonProps {
   className?: string
 }
 
+/** Human-readable names for the visual forms, mirrored from LessonVisual. */
+const VISUAL_LABELS: Record<string, string> = {
+  code: 'Code & output',
+  formula: 'Equation',
+  diagram: 'Diagram',
+  timeline: 'Timeline',
+  table: 'Comparison',
+  graph: 'Plot',
+}
+
 /** Strips the markdown fence the model wraps visual payloads in. */
 function stripFence(payload?: string): string | undefined {
   if (!payload?.trim()) return undefined
@@ -47,6 +57,7 @@ function buildSegments(lesson: AILesson): LessonVideoSegment[] {
       heading: lesson.sections?.[0]?.title ?? 'The core idea',
       narration: lesson.teachingPrompt,
       visual: stripFence(lesson.visualPayload),
+      visualLabel: VISUAL_LABELS[lesson.visualType ?? ''] ?? undefined,
       keyPoints: lesson.keyPoints,
     },
   ]

@@ -21,6 +21,8 @@ export interface FrameState {
   keyPoints: string[]
   /** Fenced-block content already stripped of its fence. */
   visual?: string
+  /** e.g. "Diagram", "Equation" — the form the model chose for this topic. */
+  visualLabel?: string
   viseme: Viseme
   speaking: boolean
   /** 0–1, drives the progress bar. */
@@ -363,6 +365,15 @@ export function drawFrame(
   // Visual block, or key points
   y += 6
   if (state.visual) {
+    // Naming the form makes the system's visual choice visible in the export,
+    // not just in the live classroom.
+    if (state.visualLabel) {
+      ctx.fillStyle = MUTED
+      ctx.font = '600 11px system-ui, sans-serif'
+      ctx.fillText(state.visualLabel.toUpperCase(), sx + 28, y)
+      y += 16
+    }
+
     const blockH = Math.min(190, 532 - y - 24)
     ctx.fillStyle = 'rgba(2,6,23,0.6)'
     roundRect(ctx, sx + 28, y, sw - 56, blockH, 14)
