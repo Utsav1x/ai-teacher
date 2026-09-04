@@ -49,16 +49,44 @@ Return valid JSON matching this exact schema. Do not add extra fields or omit an
     { "title": "<string>", "type": "Practice", "minutes": <number>, "description": "<string>" },
     { "title": "<string>", "type": "Checkpoint", "minutes": <number>, "description": "<string>" }
   ],
-  "question": {
-    "type": "<string — 'MCQ' or 'Freeform'>",
-    "prompt": "<string — The question testing the single most important concept from this lesson>",
-    "options": ["<string>", "<string>", "<string>", "<string>"], 
-    "correctIndex": <0|1|2|3>, 
-    "expectedAnswer": "<string — ONLY for Freeform. What you expect the student to mention for their answer to be correct.>",
-    "explanation": "<string — 2-3 sentences explaining why the correct answer is right. Pedagogical, not just definitional.>",
-    "teacherPrompt": "<string — Maya's 1-sentence intro before presenting the question. Warm, not robotic.>",
-    "visualPayload": "<string — optional. A fenced code block or diagram relevant to the question. Can be same or different from the lesson visual. Leave as empty string if not relevant.>"
-  },
+  "questions": [
+    {
+      "type": "<'MCQ' or 'Freeform'>",
+      "difficulty": "easy",
+      "concept": "<string — the specific concept under test, 2-5 words. e.g. 'role of the bias term'>",
+      "prompt": "<string — a recall or recognition question. A student who followed the explanation should get this.>",
+      "options": ["<string>", "<string>", "<string>", "<string>"],
+      "correctIndex": <0|1|2|3>,
+      "expectedAnswer": "<string — ONLY for Freeform>",
+      "explanation": "<string — 2-3 sentences on why the answer is right. Pedagogical, not definitional.>",
+      "teacherPrompt": "<string — Maya's 1-sentence warm intro to the question>",
+      "visualPayload": "<string — optional fenced block, or empty string>"
+    },
+    {
+      "type": "<'MCQ' or 'Freeform'>",
+      "difficulty": "core",
+      "concept": "<string — the central concept of the lesson>",
+      "prompt": "<string — tests genuine understanding of the lesson's main idea, not recall. This is the question that matters most.>",
+      "options": ["<string>", "<string>", "<string>", "<string>"],
+      "correctIndex": <0|1|2|3>,
+      "expectedAnswer": "<string — ONLY for Freeform>",
+      "explanation": "<string>",
+      "teacherPrompt": "<string>",
+      "visualPayload": "<string — optional, or empty string>"
+    },
+    {
+      "type": "<'MCQ' or 'Freeform'>",
+      "difficulty": "stretch",
+      "concept": "<string — the concept being applied>",
+      "prompt": "<string — applies the idea to a NEW situation not covered in the explanation. Should make a confident student think.>",
+      "options": ["<string>", "<string>", "<string>", "<string>"],
+      "correctIndex": <0|1|2|3>,
+      "expectedAnswer": "<string — ONLY for Freeform>",
+      "explanation": "<string>",
+      "teacherPrompt": "<string>",
+      "visualPayload": "<string — optional, or empty string>"
+    }
+  ],
   "reexplanation": "<string — 2-3 sentences. MUST use a completely different analogy or example than teachingPrompt. Shown when student answers wrong. Maya sounds patient and encouraging.>",
   "completionMessage": "<string — 1-2 sentences. Encouraging, mentions what the student just learned and what comes next.>",
   "nextTopicSuggestion": "<string — the logical next topic to learn after this one>"
@@ -75,8 +103,9 @@ export function buildLessonUserPrompt(params: {
   ragContext: string
   previousTopics: string[]
   lessonIndex: number
+  weakConcepts?: string[]
 }): string {
-  const { topic, preferences, ragContext, previousTopics, lessonIndex } = params
+  const { topic, preferences, ragContext, previousTopics, lessonIndex, weakConcepts = [] } = params
 
   const prevSection =
     previousTopics.length > 0
@@ -98,6 +127,14 @@ LEARNER PROFILE:
 - Lesson number: ${lessonIndex + 1} in this session
 
 ${prevSection}
+${
+  weakConcepts.length > 0
+    ? `\nTHE STUDENT STRUGGLED WITH: ${weakConcepts.join('; ')}.
+Do not simply move on. Open by reconnecting to at least one of these, explain it
+from a different angle than they would have seen before, and make your "easy"
+checkpoint test it directly.`
+    : ''
+}
 ${contextSection}
 
 Generate the lesson now. Return only the JSON.`

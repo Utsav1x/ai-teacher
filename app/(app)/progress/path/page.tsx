@@ -1,7 +1,6 @@
 import {
   BookOpen,
   CheckCircle2,
-  Circle,
   Clock,
   Lock,
   Play,
@@ -259,7 +258,7 @@ export default async function LearningPathPage() {
                 const isCurrent = lesson.status === 'in_progress'
                 const isDone    = lesson.status === 'completed'
                 const isLocked  = lesson.status === 'not_started' && index > 0 &&
-                                  course.lessons[index - 1].status === 'not_started'
+                                  course.lessons[index - 1].status !== 'completed'
 
                 return (
                   <li key={lesson.id} className="flex gap-4">
@@ -267,7 +266,7 @@ export default async function LearningPathPage() {
                     <div className="flex flex-col items-center">
                       <span className={cn(
                         'grid size-10 shrink-0 place-items-center rounded-full border transition-colors',
-                        isDone    && 'border-success/40 bg-success/15 text-success',
+                        isDone    && 'border-success bg-success text-success-foreground',
                         isCurrent && 'border-primary bg-primary/20 text-primary',
                         !isDone && !isCurrent && 'border-border bg-card text-muted-foreground/50',
                       )}>
@@ -326,7 +325,15 @@ export default async function LearningPathPage() {
 
                         <div className="shrink-0">
                           {isDone && (
-                            <Circle className="size-5 text-success" aria-hidden />
+                            <LinkButton
+                              href={classroomHref(lesson.engineKey)}
+                              variant="outline"
+                              size="lg"
+                              className="h-9 gap-1.5"
+                            >
+                              <Play className="size-4" />
+                              Review
+                            </LinkButton>
                           )}
                           {isCurrent && (
                             <LinkButton

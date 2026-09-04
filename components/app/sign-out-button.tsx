@@ -48,7 +48,7 @@ export function SignOutButton() {
                     }
 
                     supabase.auth.signOut().then(() => {
-                      window.location.href = '/'
+                      window.location.href = '/login/success?mode=logout'
                     })
                   }}
                 >

@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
 // ─── Circuit-board SVG background ────────────────────────────────────────────
 function CircuitBackground() {
@@ -40,13 +41,23 @@ function CircuitBackground() {
 }
 
 export default function LoginSuccessPage() {
-  const router = useRouter()
+  return (
+    <Suspense fallback={null}>
+      <LoginSuccessContent />
+    </Suspense>
+  )
+}
 
-  // Let the animation play (~2.4s), then go to dashboard
+function LoginSuccessContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const isSigningOut = searchParams.get('mode') === 'logout'
+  const nextPath = searchParams.get('next') || (isSigningOut ? '/login?logged_out=1' : '/dashboard')
+
   useEffect(() => {
-    const t = setTimeout(() => router.replace('/dashboard'), 2400)
+    const t = setTimeout(() => router.replace(nextPath), 2400)
     return () => clearTimeout(t)
-  }, [router])
+  }, [nextPath, router])
 
   return (
     <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-[#0b0f1a]">
@@ -66,12 +77,14 @@ export default function LoginSuccessPage() {
           <path   className="check-mark"   fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
         </svg>
 
-        <h2 className="text-2xl font-bold text-white">Success!</h2>
+        <h2 className="text-2xl font-bold text-white">{isSigningOut ? 'Signed out!' : 'Success!'}</h2>
         <p className="text-sm text-white/50">
-          Successfully logged into{' '}
+          {isSigningOut ? 'Successfully signed out of ' : 'Successfully logged into '}
           <span className="font-semibold text-white/80">Lumina</span>
         </p>
-        <p className="animate-pulse text-xs text-white/30">Redirecting…</p>
+        <p className="animate-pulse text-xs text-white/30">
+          {isSigningOut ? 'Returning to login…' : 'Redirecting…'}
+        </p>
       </div>
 
       <style>{`
