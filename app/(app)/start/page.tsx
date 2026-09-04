@@ -13,6 +13,9 @@ import {
   Play,
   ChevronDown,
   Check,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
@@ -136,6 +139,17 @@ function ChipField({
 // ─── Main page ────────────────────────────────────────────────────────────────
 type Step = 'input' | 'confirm'
 
+type UploadedFile = {
+  name: string
+  /** uploading → stored in Supabase; indexing → parsed, chunked and embedded. */
+  status: 'uploading' | 'indexing' | 'ready' | 'error'
+  /** Set once the file exists in the `materials` table. Scopes RAG retrieval. */
+  materialId?: string
+  /** Chunks that received an embedding — retrieval ignores any without one. */
+  chunks?: number
+  error?: string
+}
+
 export default function StartLearningPage() {
   const router  = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -143,7 +157,7 @@ export default function StartLearningPage() {
   // Step 1 state
   const [step,     setStep]     = useState<Step>('input')
   const [dragging, setDragging] = useState(false)
-  const [files,    setFiles]    = useState<string[]>([])
+  const [files,    setFiles]    = useState<UploadedFile[]>([])
   const [topic,    setTopic]    = useState('')
 
   // Step 2 state — auto-detected, user-editable
@@ -153,17 +167,76 @@ export default function StartLearningPage() {
   const [goal,     setGoal]     = useState('General curiosity')
 
   // ── file helpers ──
-  function addFiles(list: FileList | null) {
+  /**
+   * Uploads each file, then indexes it. Both steps are required before the
+   * lesson generator can retrieve anything: `/api/materials` only stores the
+   * file, and retrieval ignores chunks that have no embedding.
+   */
+  async function addFiles(list: FileList | null) {
     if (!list) return
-    setFiles((prev) => [...prev, ...Array.from(list).map((f) => f.name)])
+    const incoming = Array.from(list)
+
+    // Show every file immediately so the upload does not look frozen.
+    const startIndex = files.length
+    setFiles((prev) => [
+      ...prev,
+      ...incoming.map((f) => ({ name: f.name, status: 'uploading' as const })),
+    ])
+
+    for (let i = 0; i < incoming.length; i++) {
+      const file = incoming[i]!
+      const slot = startIndex + i
+
+      const patch = (update: Partial<UploadedFile>) =>
+        setFiles((prev) => prev.map((f, idx) => (idx === slot ? { ...f, ...update } : f)))
+
+      try {
+        const form = new FormData()
+        form.append('file', file)
+
+        const uploadRes = await fetch('/api/materials', { method: 'POST', body: form })
+        const uploadData = await uploadRes.json()
+
+        if (!uploadRes.ok) {
+          patch({ status: 'error', error: uploadData?.error ?? 'Upload failed' })
+          continue
+        }
+
+        const materialId = uploadData?.material?.id as string | undefined
+        if (!materialId) {
+          patch({ status: 'error', error: 'Upload returned no material id' })
+          continue
+        }
+
+        patch({ status: 'indexing', materialId })
+
+        const processRes = await fetch(`/api/materials/${materialId}/process`, { method: 'POST' })
+        const processData = await processRes.json()
+
+        if (!processRes.ok) {
+          patch({
+            status: 'error',
+            error: processData?.details ?? processData?.error ?? 'Indexing failed',
+          })
+          continue
+        }
+
+        patch({ status: 'ready', chunks: processData?.result?.embeddedChunks ?? 0 })
+      } catch (err) {
+        patch({ status: 'error', error: err instanceof Error ? err.message : 'Upload failed' })
+      }
+    }
   }
+
   function onDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault()
     setDragging(false)
-    addFiles(e.dataTransfer.files)
+    void addFiles(e.dataTransfer.files)
   }
 
-  const canContinue = files.length > 0 || topic.trim().length > 0
+  const readyFiles = files.filter((f) => f.status === 'ready')
+  const busyFiles = files.some((f) => f.status === 'uploading' || f.status === 'indexing')
+  const canContinue = (readyFiles.length > 0 || topic.trim().length > 0) && !busyFiles
 
   // ── step transition ──
   function handleContinue() {
@@ -246,21 +319,53 @@ export default function StartLearningPage() {
 
               {files.length > 0 && (
                 <ul className="flex flex-col gap-2">
-                  {files.map((name, i) => (
+                  {files.map((file, i) => (
                     <li
-                      key={`${name}-${i}`}
-                      className="flex items-center gap-3 rounded-lg border border-border bg-card/60 px-3 py-2"
+                      key={`${file.name}-${i}`}
+                      className="flex flex-col gap-1 rounded-lg border border-border bg-card/60 px-3 py-2"
                     >
-                      <FileText className="size-4 shrink-0 text-primary" />
-                      <span className="min-w-0 flex-1 truncate text-sm">{name}</span>
-                      <button
-                        type="button"
-                        aria-label={`Remove ${name}`}
-                        onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        <X className="size-4" />
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <FileText className="size-4 shrink-0 text-primary" />
+                        <span className="min-w-0 flex-1 truncate text-sm">{file.name}</span>
+
+                        {file.status === 'uploading' && (
+                          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                            <Loader2 className="size-3 animate-spin" />
+                            Uploading
+                          </span>
+                        )}
+                        {file.status === 'indexing' && (
+                          <span className="flex shrink-0 items-center gap-1.5 text-xs text-primary">
+                            <Loader2 className="size-3 animate-spin" />
+                            Indexing
+                          </span>
+                        )}
+                        {file.status === 'ready' && (
+                          <span className="flex shrink-0 items-center gap-1.5 text-xs text-success">
+                            <CheckCircle2 className="size-3.5" />
+                            {file.chunks ? `${file.chunks} chunks` : 'Indexed'}
+                          </span>
+                        )}
+                        {file.status === 'error' && (
+                          <span className="flex shrink-0 items-center gap-1.5 text-xs text-destructive">
+                            <AlertCircle className="size-3.5" />
+                            Failed
+                          </span>
+                        )}
+
+                        <button
+                          type="button"
+                          aria-label={`Remove ${file.name}`}
+                          onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                          className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      </div>
+
+                      {file.status === 'error' && file.error && (
+                        <p className="pl-7 text-xs text-destructive/90">{file.error}</p>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -351,15 +456,15 @@ export default function StartLearningPage() {
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Your request
           </p>
-          {files.length > 0 && (
+          {readyFiles.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {files.map((name) => (
+              {readyFiles.map((file) => (
                 <span
-                  key={name}
+                  key={file.materialId ?? file.name}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card/60 px-2.5 py-1.5 text-xs"
                 >
                   <FileText className="size-3.5 text-primary" />
-                  {name}
+                  {file.name}
                 </span>
               ))}
             </div>
@@ -417,8 +522,18 @@ export default function StartLearningPage() {
           onClick={() => {
             // Persist session data for the classroom page
             const timeMinutes = parseInt(time) || 20
+            const materialIds = readyFiles
+              .map((f) => f.materialId)
+              .filter((id): id is string => Boolean(id))
+
             const session = {
-              topic: topic.trim() || (files.length > 0 ? `Explain the content from: ${files[0]}` : 'General Learning'),
+              topic:
+                topic.trim() ||
+                (readyFiles.length > 0
+                  ? `The uploaded material: ${readyFiles.map((f) => f.name).join(', ')}`
+                  : 'General Learning'),
+              // Retrieval only runs when this is non-empty — see lesson-generator.ts.
+              materialIds,
               preferences: {
                 level,
                 language,

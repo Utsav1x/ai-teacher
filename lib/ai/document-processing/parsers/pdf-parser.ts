@@ -1,24 +1,18 @@
 /**
  * PDF Parser — extracts text per-page, preserving page numbers as structure.
  *
- * Uses pdf-parse with a custom page renderer to capture per-page content.
- * Each page becomes a ParsedSection, enabling page-level chunk metadata.
+ * Uses pdf-parse v2's `PDFParse` class, which returns page-wise text directly
+ * (`TextResult.pages`). Each page becomes a ParsedSection, enabling page-level
+ * chunk metadata.
  *
  * Page titles are derived from the first meaningful line of each page
  * (often the heading or section title printed at the top).
  */
 
+import { PDFParse } from 'pdf-parse'
 import type { DocumentParser } from './base-parser'
 import type { ParsedDocument, ParsedSection, SupportedFormat } from '../types'
-import { cleanRawText, removePdfNoise, estimateTokens } from '../cleaner'
-
-// Workaround: import from lib path to avoid pdf-parse's test-file fs.readFileSync
-// at module load time, which breaks Next.js Turbopack.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse/lib/pdf-parse.js') as (
-  buffer: Buffer,
-  options?: { pagerender?: (pageData: unknown) => Promise<string> },
-) => Promise<{ text: string; numpages: number }>
+import { cleanRawText, removePdfNoise } from '../cleaner'
 
 export class PdfParser implements DocumentParser {
   readonly supportedExtensions = ['.pdf']
@@ -30,47 +24,30 @@ export class PdfParser implements DocumentParser {
     format: SupportedFormat,
   ): Promise<ParsedDocument> {
     const pageTexts: string[] = []
-
-    // ── Per-page renderer ────────────────────────────────────────────────────
-    // pdf-parse calls this for each page with the PDFPage proxy.
-    // We capture per-page content by pushing to pageTexts[].
-    const pagerender = async (pageData: unknown): Promise<string> => {
-      const page = pageData as {
-        getTextContent: () => Promise<{
-          items: Array<{ str: string; hasEOL?: boolean }>
-        }>
-      }
-
-      try {
-        const content = await page.getTextContent()
-        const lines: string[] = []
-        let currentLine = ''
-
-        for (const item of content.items) {
-          currentLine += item.str
-          if (item.hasEOL) {
-            lines.push(currentLine.trim())
-            currentLine = ''
-          }
-        }
-        if (currentLine.trim()) lines.push(currentLine.trim())
-
-        const pageText = lines.filter(Boolean).join('\n')
-        pageTexts.push(pageText)
-        return pageText
-      } catch {
-        // Fall back to empty page on per-page render failure
-        pageTexts.push('')
-        return ''
-      }
-    }
-
     let totalPages = 0
+    /** Whole-document text, used if per-page extraction yields nothing usable. */
+    let documentText = ''
+
+    // PDFParse holds a pdfjs document open, so it must always be destroyed.
+    const parser = new PDFParse({ data: new Uint8Array(buffer) })
+
     try {
-      const result = await pdfParse(buffer, { pagerender })
-      totalPages = result.numpages
+      const result = await parser.getText()
+      totalPages = result.total
+      documentText = result.text ?? ''
+
+      // `pages` is ordered; keep positions so page numbers stay accurate even
+      // when a page yields no extractable text (scans, image-only pages).
+      for (const page of result.pages) {
+        pageTexts[page.num - 1] = page.text ?? ''
+      }
+      for (let i = 0; i < totalPages; i++) {
+        pageTexts[i] ??= ''
+      }
     } catch (err) {
       throw new Error(`PDF parsing failed for "${filename}": ${String(err)}`)
+    } finally {
+      await parser.destroy().catch(() => {})
     }
 
     // ── Build sections (one per page) ────────────────────────────────────────
@@ -104,17 +81,16 @@ export class PdfParser implements DocumentParser {
       })
     }
 
-    // If per-page render produced nothing, fall back to full-text extraction
+    // Every page was blank or too short (common with scanned PDFs) — fall back
+    // to the whole-document text rather than returning nothing.
     if (sections.length === 0) {
-      const fallbackResult = await pdfParse(buffer)
-      const cleaned = removePdfNoise(cleanRawText(fallbackResult.text))
+      const cleaned = removePdfNoise(cleanRawText(documentText))
       if (cleaned) {
         sections.push({
           content: cleaned,
           sectionIndex: 0,
         })
       }
-      totalPages = fallbackResult.numpages
     }
 
     const fullText = sections.map((s) => s.content).join('\n\n')
