@@ -108,7 +108,7 @@
     <li><a href="#assessment">Assessment methodology</a></li>
     <li><a href="#multilingual">Multilingual implementation</a></li>
     <li><a href="#voice">Voice implementation</a></li>
-    <li><a href="#video">Avatar and video generation</a></li>
+    <li><a href="#video">Visuals, avatar and video</a></li>
     <li><a href="#apis">APIs and third-party services</a></li>
     <li><a href="#setup">Setup instructions</a></li>
     <li><a href="#deployment">Deployment instructions</a></li>
@@ -159,6 +159,10 @@
     <tr><td>Adaptive checkpoints</td><td>Three graded questions; difficulty moves with performance</td></tr>
     <tr><td>Misconception diagnosis</td><td>Names the specific misunderstanding, not just "incorrect"</td></tr>
     <tr><td>Different-analogy re-explanation</td><td>The retry explanation is explicitly required to differ from the first</td></tr>
+    <tr><td>Teach-back answering</td><td>The learner explains the concept back in their own words, and that explanation is what gets evaluated</td></tr>
+    <tr><td>Subject-aware visuals</td><td>The lesson declares which form of visual the topic calls for, and why</td></tr>
+    <tr><td>Mid-lesson language switching</td><td>Change language without losing your place, score or answered checkpoints</td></tr>
+    <tr><td>Narration speed</td><td>0.7× to 1.3×, for learners who need slower or faster delivery</td></tr>
     <tr><td>Live Q&amp;A</td><td>Ask the teacher mid-lesson; history is preserved so follow-ups resolve</td></tr>
     <tr><td>Video export</td><td>The lesson rendered to a downloadable MP4 with burned-in captions</td></tr>
     <tr><td>Progress tracking</td><td>Streaks, study minutes, concepts mastered, per-lesson resume</td></tr>
@@ -331,6 +335,17 @@ and three signals accumulate as the learner works:</p>
   misconception is named, re-explained with a different analogy, and the learner
   can retry the same question or drop to an easier one.
 </p>
+
+<h3>Three ways to answer</h3>
+<p>
+  Any checkpoint can be answered by picking an option, writing a short answer, or
+  <strong>teaching it back</strong> — explaining the concept as if to a friend.
+  Teach-back is the most demanding of the three and the most revealing: a learner
+  can guess a multiple-choice answer, but cannot explain a concept they have not
+  understood. That explanation is what the evaluator reads, so the misconception
+  it finds is drawn from the learner's own words rather than from which option
+  they clicked.
+</p>
 <p>
   The final report is computed from what was actually answered — strong and weak
   areas are the real concept names from the generated lesson, and mastery derives
@@ -343,8 +358,29 @@ and three signals accumulate as the learner works:</p>
   <li><strong>Cross-language grounding.</strong> Retrieved passages and output language are independent, so an English document can be taught in Hindi and vice versa.</li>
   <li><strong>Narration.</strong> The language maps to a BCP-47 tag and then to a matching neural voice; 21 Indian voices are available.</li>
   <li><strong>Lip-sync.</strong> Visemes are mapped from both Latin and Devanagari characters, so Hindi and Hinglish animate rather than sitting still.</li>
-  <li><strong>Cache correctness.</strong> The lesson cache key includes language, so changing language regenerates rather than reusing.</li>
+  <li><strong>Cache correctness.</strong> The lesson cache key includes language, so changing language before a lesson regenerates rather than reusing.</li>
 </ul>
+
+<h3>Switching language mid-lesson</h3>
+<p>
+  The brief asks for the lesson's context to survive a language change, so the
+  lesson is <em>restated</em> rather than regenerated. The learner keeps their
+  section, their answered checkpoints, their running score, the difficulty they
+  have reached and the weak concepts recorded so far. Narration switches voice at
+  the same time.
+</p>
+<div class="note">
+  <span class="tag">Why strings, not the lesson</span>
+  <p>
+    Only the human-readable strings are sent for translation, as a flat keyed map
+    such as <code>q.0.opt.1</code>. Question indices, types, difficulties and
+    <code>correctIndex</code> never leave the browser, so the model cannot
+    renumber options or move which answer is correct. Translated values are
+    merged back by position into the original arrays, and any missing key falls
+    back to the original text — so the worst case is a partly untranslated
+    lesson, never a mis-scored one.
+  </p>
+</div>
 
 <h2 id="voice">11 · Voice implementation</h2>
 <p>Two paths, chosen by context:</p>
@@ -374,8 +410,50 @@ and three signals accumulate as the learner works:</p>
   them. During export, clip duration is known from <code>decodeAudioData</code>,
   so timing is exact.
 </p>
+<p>
+  Narration speed is adjustable from 0.7× to 1.3×. This is an accessibility
+  control as much as a preference: a learner working in a second language, or
+  meeting unfamiliar terminology, often needs the same explanation delivered more
+  slowly rather than a different explanation.
+</p>
 
-<h2 id="video">12 · Avatar and video generation</h2>
+<h2 id="video">12 · Visuals, avatar and video generation</h2>
+
+<h3>Choosing the visual</h3>
+<p>
+  Every lesson declares <code>visualType</code> — one of code, formula, diagram,
+  timeline, table or graph — together with a one-sentence
+  <code>visualRationale</code>. The choice is part of the generation contract
+  rather than an accident of free-form text, which means it can be shown to the
+  learner and inspected by anyone reviewing the system.
+</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Form</th><th>Chosen for</th><th>Rendered as</th></tr></thead>
+  <tbody>
+    <tr><td><code>code</code></td><td>Programming, algorithms, data structures</td><td>Snippet with its language tag <em>and</em> the output it produces</td></tr>
+    <tr><td><code>formula</code></td><td>Mathematics, physics, chemistry, statistics</td><td>Equation and worked steps, with wider line height and letter spacing, since formulae are read symbol by symbol</td></tr>
+    <tr><td><code>diagram</code></td><td>Biology, systems, architecture, processes</td><td>Labelled parts with arrows showing direction or flow</td></tr>
+    <tr><td><code>timeline</code></td><td>History, ordered events, lifecycles</td><td>Dated entries with room between them</td></tr>
+    <tr><td><code>table</code></td><td>Comparisons, classifications, trade-offs</td><td>Aligned columns with a header row</td></tr>
+    <tr><td><code>graph</code></td><td>Trends, relationships, distributions</td><td>Plot with labelled axes and marked values</td></tr>
+  </tbody>
+</table>
+</div>
+<p>
+  The deciding instruction is to judge by the topic rather than the subject
+  label: Newton's Laws is a formula, but the parts of the eye is a diagram,
+  though both are science. Tested across eight topics, the clearest evidence that
+  this works is <em>Minimax for Tic-Tac-Toe</em>, which chose <code>diagram</code>
+  rather than <code>code</code> — a game tree is what a teacher would actually
+  draw for it, even though the topic is programming.
+</p>
+<p>
+  The chosen form is labelled in the classroom and carried into the exported
+  video, so the reasoning is visible in the artifact as well as on screen.
+</p>
+
+<h3>Avatar and video</h3>
 <p>
   The avatar is drawn as SVG in the live classroom and re-drawn on a canvas for
   export. It is not a pre-rendered clip, and that is the point: pre-rendered
@@ -460,7 +538,7 @@ pnpm dev                       # http://localhost:3000</pre>
   <li><strong>Exported audio is Opus in MP4.</strong> Chrome cannot encode AAC here. Modern players handle it; QuickTime and PowerPoint may play the video silently.</li>
   <li><strong>Edge TTS is unofficial.</strong> It uses the endpoint behind Edge's Read Aloud. Stable in practice, but not a published API — hence the Gemini fallback.</li>
   <li><strong>Coarse DOCX chunking.</strong> The DOCX parser emits a single section per document, so retrieval is less precise than for PDFs.</li>
-  <li><strong>Language switching is per-lesson.</strong> Changing language regenerates the lesson rather than translating in place mid-session.</li>
+  <li><strong>Switching language costs a request and a short wait.</strong> The lesson is restated in place, but that is one model call — a few seconds during which narration stops.</li>
   <li><strong>Progress is per-lesson, not per-section.</strong> Resuming returns to the lesson, not the exact sentence.</li>
   <li><strong>No offline mode.</strong> Generation, embedding and export narration all require network access.</li>
 </ul>

@@ -85,6 +85,16 @@ async function resolveLessonId(
 
   if (!courseId) return null
 
+  // Enrol the learner in their own course. The learning path and dashboard both
+  // read through user_courses, so without this row every generated lesson is
+  // invisible to them and only the seeded demo course ever appears.
+  await supabase
+    .from('user_courses')
+    .upsert(
+      { user_id: userId, course_id: courseId },
+      { onConflict: 'user_id,course_id', ignoreDuplicates: true },
+    )
+
   const { data: existing } = await supabase
     .from('lessons')
     .select('id')
