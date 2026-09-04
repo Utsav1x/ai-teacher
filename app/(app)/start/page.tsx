@@ -287,7 +287,7 @@ export default function StartLearningPage() {
                 onDragLeave={() => setDragging(false)}
                 onDrop={onDrop}
                 className={cn(
-                  'flex flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center transition-colors',
+                  'flex flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center transition-colors [&>*]:pointer-events-none',
                   dragging
                     ? 'border-primary bg-primary/10'
                     : 'border-border bg-muted/30 hover:border-primary/50 hover:bg-muted/50',
