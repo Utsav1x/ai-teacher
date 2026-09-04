@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
     lessonId: TeacherLessonId
     answers: Array<{ questionId: string; selectedIndex: number }>
     timeSpentSeconds: number
+    activityDate?: string
   }
 
   const { lessonId, answers: rawAnswers, timeSpentSeconds } = body
@@ -136,46 +137,81 @@ export async function POST(req: NextRequest) {
 
   const { strong, weak, recommendations } = await deriveReport(lesson, lessonId, answerRecords, scorePct)
 
-  // Look up lesson DB row (create if missing)
-  let { data: lessonRow } = await supabase
+  // Resolve the seeded lesson without creating an incomplete database row.
+  const { data: lessonRow, error: lessonLookupError } = await supabase
     .from('lessons')
     .select('id')
     .eq('title', lesson.title)
+    .eq('is_default', true)
+    .limit(1)
     .maybeSingle()
 
-  if (!lessonRow) {
-    const { data: newLesson } = await supabase
-      .from('lessons')
-      .insert({ title: lesson.title, description: lesson.subtitle })
-      .select('id')
-      .single()
-    lessonRow = newLesson
+  if (lessonLookupError) {
+    console.error('[assessment/POST] Lesson lookup failed:', lessonLookupError.message)
   }
 
-  if (!lessonRow) {
-    return NextResponse.json({ error: 'Could not resolve lesson row' }, { status: 500 })
+  // Completing an assessment completes the associated lesson in the learning path.
+  if (lessonRow) {
+    const { error: progressError } = await supabase
+      .from('lesson_progress')
+      .upsert(
+        {
+          user_id:             user.id,
+          lesson_id:           lessonRow.id,
+          status:              'completed',
+          progress_percentage: 100,
+          completed_at:        new Date().toISOString(),
+          updated_at:          new Date().toISOString(),
+        },
+        { onConflict: 'user_id,lesson_id' },
+      )
+
+    if (progressError) {
+      console.error('[assessment/POST] Progress update failed:', progressError.message)
+    }
+  } else {
+    console.error(`[assessment/POST] No default lesson found for engine lesson: ${lessonId}`)
+  }
+
+  const activityDate = /^\d{4}-\d{2}-\d{2}$/.test(body.activityDate ?? '')
+    ? body.activityDate!
+    : new Date().toISOString().slice(0, 10)
+  const { data: existingActivity } = await supabase
+    .from('learning_activity')
+    .select('study_minutes')
+    .eq('user_id', user.id)
+    .eq('activity_date', activityDate)
+    .maybeSingle()
+
+  const studyMinutes = (existingActivity?.study_minutes ?? 0) + Math.max(1, Math.ceil(timeSpentSeconds / 60))
+  const { error: activityError } = await supabase
+    .from('learning_activity')
+    .upsert(
+      { user_id: user.id, activity_date: activityDate, study_minutes: studyMinutes },
+      { onConflict: 'user_id,activity_date' },
+    )
+
+  if (activityError) {
+    console.error('[assessment/POST] Activity update failed:', activityError.message)
   }
 
   // Upsert assessment result (one record per user+lesson; latest wins)
   const { data: result, error } = await supabase
     .from('assessment_results')
-    .upsert(
-      {
-        user_id:         user.id,
-        lesson_id:       lessonRow.id,
-        lesson_key:      lessonId,
-        score:           scorePct,
-        correct:         correctCount,
-        total,
-        time_spent:      timeSpent,
-        answers:         answerRecords,
-        strong,
-        weak,
-        recommendations,
-        created_at:      new Date().toISOString(),
-      },
-      { onConflict: 'user_id,lesson_key' },
-    )
+    .insert({
+      user_id:         user.id,
+      lesson_id:       lessonRow?.id ?? null,
+      lesson_key:      lessonId,
+      score:           scorePct,
+      correct:         correctCount,
+      total,
+      time_spent:      timeSpent,
+      answers:         answerRecords,
+      strong,
+      weak,
+      recommendations,
+      created_at:      new Date().toISOString(),
+    })
     .select()
     .single()
 

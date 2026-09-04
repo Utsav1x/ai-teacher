@@ -168,6 +168,55 @@ export default function ClassroomPage() {
   const [weakConcepts, setWeakConcepts] = useState<string[]>([])
 
   const requestRef = useRef(0)
+  /** Wall-clock start, so completed lessons report real study minutes. */
+  const startedAtRef = useRef(Date.now())
+  const completionSavedRef = useRef(false)
+
+  // Mirrored into refs so saveProgress can read current values without being
+  // recreated on every state change.
+  const lessonRef = useRef<AILesson | null>(null)
+  const phaseRef = useRef<LessonPhase>('teaching')
+  const pausedRef = useRef(false)
+
+  useEffect(() => {
+    lessonRef.current = lesson
+  }, [lesson])
+  useEffect(() => {
+    phaseRef.current = phase
+  }, [phase])
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
+
+  /**
+   * Records progress against the learner's Supabase row.
+   *
+   * Fire-and-forget: a failed write must never interrupt a lesson, so errors
+   * are logged rather than surfaced. The lesson title is sent because generated
+   * lessons have no predictable key — the route creates a `lessons` row for it.
+   */
+  const saveProgress = useCallback(
+    (status: 'in_progress' | 'completed', percentage: number, extra?: Record<string, unknown>) => {
+      const current = lessonRef.current
+      if (!current) return
+
+      void fetch('/api/progress/lesson', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lessonKey: current.id,
+          lessonTitle: current.title,
+          status,
+          progressPercentage: Math.round(percentage),
+          timeSpentSeconds: Math.round((Date.now() - startedAtRef.current) / 1000),
+          currentSection: phaseRef.current,
+          paused: pausedRef.current,
+          progressState: extra ?? {},
+        }),
+      }).catch((err) => console.warn('[classroom] Could not save progress:', err))
+    },
+    [],
+  )
 
   // ── Lesson generation ───────────────────────────────────────────────────────
   const loadLesson = useCallback(
@@ -220,8 +269,14 @@ export default function ClassroomPage() {
         }
 
         setLesson(data.lesson as AILesson)
+        lessonRef.current = data.lesson as AILesson
+        startedAtRef.current = Date.now()
+        completionSavedRef.current = false
         setResponseMode(data.lesson?.question?.type === 'Freeform' ? 'freeform' : 'mcq')
-        setLoadState('ready')
+          setLoadState('ready')
+        // Register the lesson as started so it shows on the dashboard even if
+        // the learner leaves before finishing.
+        saveProgress('in_progress', 5)
         setPlaying(true)
         setPaused(false)
       } catch (err) {
@@ -230,7 +285,7 @@ export default function ClassroomPage() {
         setLoadState('error')
       }
     },
-    [],
+    [saveProgress],
   )
 
   // See lesson-plan: Strict Mode double-invokes effects, and each duplicate
@@ -527,6 +582,21 @@ export default function ClassroomPage() {
       }
 
       setPhase(result.isCorrect ? 'continuing' : 'reexplaining')
+
+      // Persist after each checkpoint so a dropped session keeps its progress.
+      const answeredNow = answered.length + 1
+      const pct = Math.min(
+        99,
+        Math.round(
+          ((sectionIndex + 1) / totalSteps) * 50 +
+            (questionPool.length > 0 ? (answeredNow / questionPool.length) * 50 : 0),
+        ),
+      )
+      if (answeredNow >= questionPool.length) {
+        completeLesson()
+      } else {
+        saveProgress('in_progress', pct)
+      }
     } catch (err) {
       setEvalError(err instanceof Error ? err.message : 'Could not reach the AI teacher.')
       setPhase('question')
@@ -536,10 +606,13 @@ export default function ClassroomPage() {
   function advanceSection() {
     setSectionIndex((i) => Math.min(i + 1, totalSteps - 1))
     setPhase('teaching')
+    saveProgress('in_progress', overallProgress())
   }
 
   function nextLesson() {
     if (!lesson) return
+    // Moving on finishes the lesson behind you.
+    if (answered.length > 0) completeLesson()
     // The cached plan describes the lesson we are leaving — drop it.
     try {
       sessionStorage.removeItem(LESSON_CACHE_KEY)
@@ -573,9 +646,29 @@ export default function ClassroomPage() {
     setPhase('teaching')
   }
 
+  /** Teaching progress and checkpoint progress, weighted into one figure. */
+  function overallProgress(): number {
+    const sectionShare = ((sectionIndex + 1) / totalSteps) * 50
+    const checkpointShare =
+      questionPool.length > 0 ? (answered.length / questionPool.length) * 50 : 0
+    return Math.min(99, Math.round(sectionShare + checkpointShare))
+  }
+
+  function completeLesson() {
+    if (completionSavedRef.current) return
+    completionSavedRef.current = true
+    saveProgress('completed', 100, {
+      correct: correctCount,
+      answered: answered.length,
+      weakConcepts,
+    })
+  }
+
   function endLesson() {
     setPlaying(false)
     setPaused(true)
+    // Only a lesson the learner actually worked through counts as completed.
+    if (answered.length > 0) completeLesson()
     router.push('/progress/report')
   }
 

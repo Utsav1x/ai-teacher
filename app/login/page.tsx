@@ -125,7 +125,7 @@ function LoginContent() {
       }
 
       if (data?.user) {
-        router.push('/dashboard')
+        router.push('/login/success')
       }
     } catch (err) {
       const messageText = err instanceof Error ? err.message : 'Something went wrong. Please try again.'

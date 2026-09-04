@@ -46,8 +46,8 @@ function AuthCallbackContent() {
         setError(result.linkingMessage)
       }
 
-      // Redirect to the appropriate page
-      router.replace(result.redirectUrl)
+      // Show the success transition before continuing to setup or dashboard.
+      router.replace(`/login/success?next=${encodeURIComponent(result.redirectUrl)}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Authentication failed'
       setError(message)
