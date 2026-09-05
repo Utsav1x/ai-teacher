@@ -237,6 +237,14 @@ async function getCompletedLessonCount() {
   return count ?? 0
 }
 
+/** The `lessons` row embedded in a lesson_progress query. */
+type JoinedLesson = {
+  id: string
+  title: string
+  is_default: boolean
+  content: { engineKey?: string } | null
+}
+
 async function getRecentLessons() {
   const supabase = await createSupabaseServerClient()
   if (!supabase) return []
@@ -264,15 +272,18 @@ async function getRecentLessons() {
   if (!data) return []
 
   return data.map((row) => {
-    // @ts-expect-error Supabase types for JSONB columns are often opaque
-    const engineKey = row.lessons.content?.engineKey ?? row.lessons.id
+    // PostgREST returns a single object for this many-to-one join, but the
+    // generated types describe every embedded relation as an array. The rest of
+    // the app narrows these the same way — see app/(app)/progress/path/page.tsx.
+    const lesson = row.lessons as unknown as JoinedLesson
+
     return {
-      id: row.lessons.id,
-      title: row.lessons.title,
+      id: lesson.id,
+      title: lesson.title,
       status: row.status,
       progress: Math.round(row.progress_percentage),
       updatedAt: new Date(row.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-      engineKey,
+      engineKey: lesson.content?.engineKey ?? lesson.id,
     }
   })
 }

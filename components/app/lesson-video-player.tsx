@@ -43,6 +43,15 @@ import type { VideoJob, VideoClip } from '@/lib/video/types'
 /** How often to poll for clip status while D-ID is rendering (ms). */
 const POLL_INTERVAL_MS = 4000
 
+/**
+ * How long to keep polling before giving up (ms).
+ *
+ * A clip D-ID never finishes stays 'started' forever, and nothing else here
+ * would ever stop asking about it. Six minutes is well past a normal render for
+ * the six scenes a job submits.
+ */
+const POLL_TIMEOUT_MS = 6 * 60_000
+
 // ─── Player state ─────────────────────────────────────────────────────────────
 
 type PlayerState =
@@ -98,6 +107,7 @@ export function LessonVideoPlayer({
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pollDeadlineRef = useRef<number>(0)
   const abortRef = useRef<AbortController | null>(null)
 
   // ─── Cleanup ────────────────────────────────────────────────────────────────
@@ -145,6 +155,17 @@ export function LessonVideoPlayer({
         } else if (updatedJob.state === 'error') {
           setError(updatedJob.error ?? 'Video generation failed.')
           setPlayerState('error')
+        } else if (Date.now() >= pollDeadlineRef.current) {
+          // Out of patience. Whatever rendered is still worth watching.
+          const rendered = updatedJob.clips.filter(
+            (c) => c.clipStatus === 'done' && c.videoUrl,
+          ).length
+          if (rendered > 0) {
+            setPlayerState('ready')
+          } else {
+            setError('Video generation timed out — D-ID never finished rendering.')
+            setPlayerState('error')
+          }
         } else {
           // Still rendering — poll again after delay.
           pollTimerRef.current = setTimeout(() => {
@@ -166,6 +187,7 @@ export function LessonVideoPlayer({
     setJob(null)
     setCurrentClipIndex(0)
     setPlayerState('preparing')
+    pollDeadlineRef.current = Date.now() + POLL_TIMEOUT_MS
 
     abortRef.current = new AbortController()
 

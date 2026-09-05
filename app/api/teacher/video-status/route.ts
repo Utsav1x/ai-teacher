@@ -89,20 +89,34 @@ export async function POST(req: NextRequest) {
   const errorCount = updatedClips.filter((c) => c.clipStatus === 'error').length
   const totalCount = updatedClips.length
 
-  const allDone = doneCount === totalCount
-  const allFailed = errorCount === totalCount
-
-  const progress = Math.round(((doneCount + errorCount * 0.5) / totalCount) * 100)
+  // A job is finished when nothing is still rendering — not when every clip
+  // succeeded. Deciding on `doneCount === totalCount` alone left a job with a
+  // mix of finished and failed scenes stuck in 'polling' with nothing left to
+  // poll, and the client re-polls on any non-terminal state, so the spinner ran
+  // until the tab closed. Partial failure is an expected path: generate-video
+  // already returns a job when only some scenes were submitted successfully.
+  const pendingCount = updatedClips.filter(
+    (c) => c.clipStatus === 'created' || c.clipStatus === 'started',
+  ).length
 
   let state: VideoJob['state'] = 'polling'
   let statusMessage = `Processing ${doneCount}/${totalCount} scenes…`
+  let progress = Math.round(((doneCount + errorCount * 0.5) / totalCount) * 100)
 
-  if (allFailed) {
-    state = 'error'
-    statusMessage = 'All scenes failed to render. Check your D-ID credits.'
-  } else if (allDone) {
-    state = 'ready'
-    statusMessage = 'Video ready'
+  if (pendingCount === 0) {
+    progress = 100
+    if (doneCount === 0) {
+      state = 'error'
+      statusMessage = 'All scenes failed to render. Check your D-ID credits.'
+    } else {
+      // The player only ever plays clips that finished, so a partial result is
+      // still watchable.
+      state = 'ready'
+      statusMessage =
+        errorCount > 0
+          ? `Video ready — ${doneCount} of ${totalCount} scenes rendered`
+          : 'Video ready'
+    }
   } else if (doneCount > 0) {
     statusMessage = `${doneCount} of ${totalCount} scenes ready…`
   }

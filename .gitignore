@@ -23,3 +23,8 @@ lumina.db-wal
 
 # Local editor/tooling config
 .claude/
+
+# One-off debug scripts run against the live database. Handy locally, but they
+# use the service-role key and fail the typecheck, so they stay out of the repo.
+/scratch.ts
+/scratch.*.ts
