@@ -1,7 +1,8 @@
 {
-  "name": "my-project",
+  "name": "lumina",
   "version": "0.1.0",
   "private": true,
+  "description": "An AI teacher that learns from your material, teaches it aloud in your language, and adapts to how you answer.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
