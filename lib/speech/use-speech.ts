@@ -61,6 +61,13 @@ export function languageToTag(language: string): string {
 export interface UseSpeechResult {
   /** True while an utterance is being spoken. */
   speaking: boolean
+  /**
+   * True between asking for narration and it starting to play.
+   *
+   * `speaking` is already true here so the avatar stays alive, but controls
+   * that need to know whether there is real audio yet can tell the difference.
+   */
+  preparing: boolean
   /** True while speech is paused mid-utterance. */
   paused: boolean
   /** Current mouth shape for the avatar. */
@@ -112,6 +119,17 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
   const engineRef = useRef<'browser' | 'server'>('browser')
   /** Discards a fetch that resolves after a newer speak() or a stop(). */
   const requestIdRef = useRef(0)
+  /**
+   * Pause intent, readable from async code.
+   *
+   * Narration is fetched before it plays, and `paused` state is not visible
+   * inside that pending closure. Without this, pausing while a paragraph was
+   * still downloading did nothing and the teacher started talking the moment
+   * it arrived.
+   */
+  const pausedRef = useRef(false)
+  /** True between asking for narration and the audio actually starting. */
+  const [preparing, setPreparing] = useState(false)
 
   // ── Voice list ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -159,12 +177,20 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
     }
   }, [])
 
-  /** Plays one word's mouth shapes across roughly the time it takes to say it. */
+  /**
+   * Plays one word's mouth shapes across roughly the time it takes to say it.
+   *
+   * `spanMs` overrides the character-count estimate when the real audio length
+   * is known, which matters most in scripts where character count says little
+   * about spoken duration.
+   */
   const animateWord = useCallback(
-    (word: string) => {
+    (word: string, spanMs?: number) => {
       clearTimers()
       const shapes = wordToVisemes(word)
-      const hold = visemeHoldMs(word, shapes.length)
+      const hold = spanMs
+        ? Math.max(40, spanMs / Math.max(1, shapes.length))
+        : visemeHoldMs(word, shapes.length)
 
       shapes.forEach((shape, i) => {
         const id = window.setTimeout(() => setViseme(shape), i * hold)
@@ -186,9 +212,21 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
    * than the exception. A real boundary event cancels it when one shows up.
    */
   const startFallbackAnimation = useCallback(
-    (text: string) => {
+    (text: string, totalMs?: number) => {
       const words = text.split(/\s+/).filter(Boolean)
       fallbackWordsRef.current = words
+
+      // Measured over what is left to say, not the whole paragraph, so a walk
+      // restarted by resume() is scaled against the audio that actually remains.
+      const totalChars =
+        words.slice(fallbackIndexRef.current).reduce((n, w) => n + w.length, 0) || 1
+      // When the real audio length is known, spread the walk across it so the
+      // mouth stops exactly when the voice does. The character estimate below
+      // is tuned for English and under-runs badly on Devanagari and other
+      // Indic scripts, where a four-character word can take as long to say as
+      // an eight-letter English one — the walk finished early and the mouth
+      // sat still for the rest of the paragraph.
+      const perChar = totalMs && totalMs > 0 ? totalMs / totalChars : 0
 
       const step = () => {
         if (boundarySeenRef.current) return
@@ -197,9 +235,14 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
 
         const word = words[index]!
         fallbackIndexRef.current = index + 1
-        animateWord(word)
-        // ~165 wpm at rate 0.95, scaled by word length.
-        const duration = Math.min(950, Math.max(230, word.length * 78))
+
+        const span = perChar ? perChar * word.length : undefined
+        animateWord(word, span)
+
+        // ~165 wpm at rate 0.95, scaled by word length, when nothing better.
+        const duration = span
+          ? Math.max(120, span)
+          : Math.min(950, Math.max(230, word.length * 78))
         fallbackRef.current = window.setTimeout(step, duration)
       }
 
@@ -238,7 +281,9 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
     clearFallback()
     clearKeepAlive()
     utteranceRef.current = null
+    pausedRef.current = false
     setSpeaking(false)
+    setPreparing(false)
     setPaused(false)
     setViseme('rest')
   }, [clearTimers, clearFallback, clearKeepAlive, releaseAudio])
@@ -248,6 +293,7 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
     (trimmed: string) => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
         setSpeaking(false)
+        setPreparing(false)
         return
       }
 
@@ -267,6 +313,7 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
 
       utterance.onstart = () => {
         setSpeaking(true)
+        setPreparing(false)
         setPaused(false)
 
         // Animate immediately on the estimated clock. If the voice does support
@@ -302,6 +349,7 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
         clearFallback()
         clearKeepAlive()
         setSpeaking(false)
+        setPreparing(false)
         setPaused(false)
         setViseme('rest')
         utteranceRef.current = null
@@ -345,20 +393,46 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
         clearTimers()
         clearFallback()
         setSpeaking(false)
+        setPreparing(false)
         setPaused(false)
         setViseme('rest')
       }
 
+      /**
+       * Spreads the mouth animation across the clip's real length.
+       *
+       * `duration` is only known once metadata has loaded, which is normally
+       * before playback starts but is not guaranteed.
+       */
+      const startWalk = () => {
+        const seconds = audio.duration
+        const totalMs =
+          Number.isFinite(seconds) && seconds > 0
+            ? (seconds * 1000) / audio.playbackRate
+            : undefined
+        startFallbackAnimation(trimmed, totalMs)
+      }
+
       audio.onplay = () => {
         setSpeaking(true)
+        setPreparing(false)
         setPaused(false)
-        startFallbackAnimation(trimmed)
+        startWalk()
       }
       audio.onended = finish
       audio.onerror = () => {
         // A codec the browser will not decode. Say it some other way.
         finish()
         speakInBrowser(trimmed)
+      }
+
+      if (pausedRef.current) {
+        // The learner paused while this was downloading. Hold it ready so
+        // resume() picks up here instead of the audio starting behind their back.
+        setPreparing(false)
+        setSpeaking(true)
+        setPaused(true)
+        return
       }
 
       void audio.play().catch(() => {
@@ -379,15 +453,21 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
       stop()
       const requestId = ++requestIdRef.current
 
-      // The fetch takes a moment; a motionless teacher in that gap reads as a
-      // bug, so the avatar goes live straight away and the mouth starts when
-      // the audio does.
-      setSpeaking(true)
-
       if (trimmed.length > MAX_SERVER_CHARS) {
         speakInBrowser(trimmed)
         return
       }
+
+      // Claim the engine before the await, so a pause() arriving during the
+      // fetch reaches the right one instead of the engine used last time.
+      engineRef.current = 'server'
+
+      // The fetch takes a moment; a motionless teacher in that gap reads as a
+      // bug, so the avatar goes live straight away and the mouth starts when
+      // the audio does. `preparing` keeps that distinguishable from real
+      // playback for anything that needs to tell them apart.
+      setSpeaking(true)
+      setPreparing(true)
 
       void (async () => {
         let url: string | null = null
@@ -418,6 +498,7 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
           playServerAudio(url, trimmed)
         } else {
           setServerUnavailable(true)
+          setPreparing(false)
           speakInBrowser(trimmed)
         }
       })()
@@ -426,6 +507,10 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
   )
 
   const pause = useCallback(() => {
+    // Recorded before touching either engine: narration still downloading has
+    // no audio element to pause, and this is what stops it starting on arrival.
+    pausedRef.current = true
+
     if (engineRef.current === 'server') {
       audioRef.current?.pause()
     } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -439,8 +524,12 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
   }, [clearTimers, clearFallback])
 
   const resume = useCallback(() => {
+    pausedRef.current = false
+
+    const audio = audioRef.current
     if (engineRef.current === 'server') {
-      void audioRef.current?.play().catch(() => {})
+      if (!audio) return
+      void audio.play().catch(() => {})
     } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.resume()
     }
@@ -450,7 +539,11 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
     // Boundary-driven mouths restart themselves on the next event; the
     // estimated walk has to be picked back up from where it stopped.
     if (!boundarySeenRef.current && fallbackWordsRef.current.length > 0) {
-      startFallbackAnimation(fallbackWordsRef.current.join(' '))
+      const remainingMs =
+        engineRef.current === 'server' && audio && Number.isFinite(audio.duration)
+          ? ((audio.duration - audio.currentTime) * 1000) / audio.playbackRate
+          : undefined
+      startFallbackAnimation(fallbackWordsRef.current.join(' '), remainingMs)
     }
   }, [startFallbackAnimation])
 
@@ -459,6 +552,7 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
 
   return {
     speaking,
+    preparing,
     paused,
     viseme,
     supported,

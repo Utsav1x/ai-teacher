@@ -76,6 +76,12 @@ interface LessonVideoPlayerProps {
   onVideoEnd?: () => void
   /** Called before generation starts (e.g. to stop other narration). */
   onBeforeGenerate?: () => void
+  /**
+   * Called when the video stops without reaching the end — cancelled by the
+   * learner, or failed. Lets the classroom hand narration back to the avatar,
+   * which would otherwise stay silent for the rest of the lesson.
+   */
+  onStopped?: () => void
   className?: string
 }
 
@@ -99,6 +105,7 @@ export function LessonVideoPlayer({
   onQuestionReached,
   onVideoEnd,
   onBeforeGenerate,
+  onStopped,
   className,
 }: LessonVideoPlayerProps) {
   const [playerState, setPlayerState] = useState<PlayerState>('idle')
@@ -125,6 +132,15 @@ export function LessonVideoPlayer({
       abortRef.current?.abort()
     }
   }, [stopPolling])
+
+  // Held in a ref because callers pass an inline arrow, which would otherwise
+  // re-run this on every render rather than only on a real state change.
+  const onStoppedRef = useRef(onStopped)
+  onStoppedRef.current = onStopped
+
+  useEffect(() => {
+    if (playerState === 'idle' || playerState === 'error') onStoppedRef.current?.()
+  }, [playerState])
 
   // ─── Polling loop ────────────────────────────────────────────────────────────
   const poll = useCallback(

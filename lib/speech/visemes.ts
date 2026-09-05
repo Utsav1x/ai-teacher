@@ -34,19 +34,46 @@ const LETTER_VISEMES: Record<string, Viseme> = {
   x: 'wide', z: 'wide',
 }
 
-/**
- * Devanagari vowel signs and independent vowels, so Hindi and Hinglish
- * lessons animate rather than sitting at rest.
- */
-const DEVANAGARI_VISEMES: Record<string, Viseme> = {
+/** Independent vowels and vowel signs (matras). */
+const DEVANAGARI_VOWELS: Record<string, Viseme> = {
   'अ': 'open', 'आ': 'open', 'ा': 'open',
   'इ': 'wide', 'ई': 'wide', 'ि': 'wide', 'ी': 'wide',
   'उ': 'round', 'ऊ': 'round', 'ु': 'round', 'ू': 'round',
+  'ऋ': 'round', 'ृ': 'round',
   'ए': 'wide', 'ऐ': 'wide', 'े': 'wide', 'ै': 'wide',
   'ओ': 'round', 'औ': 'round', 'ो': 'round', 'ौ': 'round',
-  'म': 'closed', 'ब': 'closed', 'प': 'closed', 'भ': 'closed',
-  'फ': 'teeth', 'व': 'teeth',
+  'ं': 'closed', 'ँ': 'closed', 'ः': 'open',
 }
+
+/**
+ * Devanagari consonants, grouped by where they are articulated.
+ *
+ * This used to cover six letters and skip the rest, which is why Hindi looked
+ * broken: unmapped characters produce no shape at all, so "नमस्कार" came out as
+ * two mouth positions for the whole word and shorter words as one. The avatar
+ * was not frozen — it had almost nothing to play.
+ */
+const DEVANAGARI_CONSONANTS: Record<string, Viseme> = {
+  // Velar — jaw drops
+  'क': 'open', 'ख': 'open', 'ग': 'open', 'घ': 'open', 'ङ': 'open', 'ह': 'open',
+  'क़': 'open', 'ख़': 'open', 'ग़': 'open',
+  // Palatal
+  'च': 'wide', 'छ': 'wide', 'ज': 'wide', 'झ': 'wide', 'ञ': 'wide', 'य': 'wide',
+  'ज़': 'wide', 'श': 'wide', 'ष': 'wide', 'स': 'wide',
+  // Retroflex and dental
+  'ट': 'wide', 'ठ': 'wide', 'ड': 'wide', 'ढ': 'wide', 'ण': 'wide',
+  'त': 'wide', 'थ': 'wide', 'द': 'wide', 'ध': 'wide', 'न': 'wide',
+  'ड़': 'wide', 'ढ़': 'wide', 'ल': 'wide', 'ळ': 'wide',
+  // Rhotic — lips round
+  'र': 'round',
+  // Labial — lips meet
+  'प': 'closed', 'ब': 'closed', 'भ': 'closed', 'म': 'closed',
+  // Labiodental
+  'फ': 'teeth', 'फ़': 'teeth', 'व': 'teeth',
+}
+
+/** Halant: suppresses the inherent vowel that follows a consonant. */
+const VIRAMA = '्'
 
 /**
  * Converts a word into the mouth shapes to play while it is spoken.
@@ -57,11 +84,31 @@ const DEVANAGARI_VISEMES: Record<string, Viseme> = {
  */
 export function wordToVisemes(word: string): Viseme[] {
   const shapes: Viseme[] = []
+  const chars = [...word.toLowerCase()]
 
-  for (const char of word.toLowerCase()) {
-    const viseme = DEVANAGARI_VISEMES[char] ?? LETTER_VISEMES[char]
-    if (!viseme) continue
+  const push = (viseme: Viseme) => {
     if (shapes[shapes.length - 1] !== viseme) shapes.push(viseme)
+  }
+
+  for (let i = 0; i < chars.length; i++) {
+    const char = chars[i]!
+
+    const consonant = DEVANAGARI_CONSONANTS[char]
+    if (consonant) {
+      push(consonant)
+
+      // Every Devanagari consonant carries an inherent "a" unless a vowel sign
+      // or a virama follows — "कमल" is said ka-ma-la, not k-m-l. Without this
+      // the jaw never opens between consonants and the mouth barely moves.
+      const next = chars[i + 1]
+      const vowelFollows = next !== undefined && (next === VIRAMA || next in DEVANAGARI_VOWELS)
+      if (!vowelFollows) push('open')
+      continue
+    }
+
+    const viseme = DEVANAGARI_VOWELS[char] ?? LETTER_VISEMES[char]
+    if (!viseme) continue
+    push(viseme)
   }
 
   // Punctuation-only or unmapped scripts still need a beat of movement.

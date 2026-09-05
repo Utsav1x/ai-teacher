@@ -202,6 +202,15 @@ function ClassroomContent() {
   // ── AI video player ─────────────────────────────────────────────────────────
   /** Set to true when the AI video player reaches a question checkpoint. */
   const [videoReachedQuestion, setVideoReachedQuestion] = useState(false)
+  /**
+   * True from the moment the AI video is generated until it ends.
+   *
+   * The video carries its own narration, and the player moves the lesson
+   * between phases as it plays. Each of those phase changes re-triggers the
+   * narration effect below, so without this the avatar started reading the
+   * script aloud on top of the video.
+   */
+  const [videoActive, setVideoActive] = useState(false)
 
   // ── Mid-lesson language switching ───────────────────────────────────────────
   const [language, setLanguage] = useState<string>('English')
@@ -556,14 +565,14 @@ function ClassroomContent() {
   // Pause/resume is handled by the transport controls so a paused lesson
   // continues mid-sentence instead of restarting the paragraph.
   useEffect(() => {
-    if (!narration) {
+    if (!narration || videoActive) {
       speech.stop()
       return
     }
     speech.speak(narration)
     // `speech` is recreated each render; `narration` is the real trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [narration])
+  }, [narration, videoActive])
 
   const avatarLine =
     loadState === 'loading'
@@ -948,7 +957,13 @@ function ClassroomContent() {
                   size="icon"
                   variant="secondary"
                   className="h-9 w-9 rounded-full border border-white/10 bg-slate-900/60 text-slate-200 hover:bg-slate-800"
-                  aria-label={speech.speaking ? 'Mute narration' : 'Replay narration'}
+                  aria-label={
+                    speech.preparing
+                      ? 'Loading narration — click to cancel'
+                      : speech.speaking
+                        ? 'Mute narration'
+                        : 'Replay narration'
+                  }
                   onClick={() => (speech.speaking ? speech.stop() : speech.speak(narration))}
                 >
                   {speech.speaking ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
@@ -1537,7 +1552,11 @@ function ClassroomContent() {
             <LessonVideoPlayer
               lesson={lesson}
               language={language}
-              onBeforeGenerate={speech.stop}
+              onBeforeGenerate={() => {
+                setVideoActive(true)
+                speech.stop()
+              }}
+              onStopped={() => setVideoActive(false)}
               onQuestionReached={(qIdx) => {
                 setVideoReachedQuestion(true)
                 // Pick the corresponding question and start the question phase.
@@ -1553,6 +1572,7 @@ function ClassroomContent() {
               }}
               onVideoEnd={() => {
                 setVideoReachedQuestion(false)
+                setVideoActive(false)
                 setPhase('continuing')
               }}
             />
