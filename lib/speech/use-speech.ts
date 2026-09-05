@@ -4,16 +4,29 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { wordToVisemes, visemeHoldMs, type Viseme } from './visemes'
 
 /**
- * Narration via the Web Speech API.
+ * Narration, server-first.
  *
- * Chosen over a hosted TTS service deliberately: it needs no API key, has no
- * quota to exhaust mid-demo, works offline, and speaks whatever language the
- * lesson was generated in. The trade-off is that voice quality depends on the
- * viewer's OS.
+ * Two engines, in order of preference:
  *
- * Also drives avatar lip-sync — `viseme` updates in time with the real
- * utterance, because word boundaries come from the synthesiser itself.
+ *   1. `/api/teacher/speak` — Microsoft neural voices over Edge TTS, with a
+ *      Gemini fallback behind it. No API key, no quota, and it carries voices
+ *      for every language a lesson can be generated in.
+ *   2. The browser's Web Speech API, for when the route is unreachable.
+ *
+ * This used to be browser-only, which quietly capped the product at whatever
+ * voices the viewer's OS shipped with. A learner on Windows asking for a
+ * Marathi lesson got a banner saying no voice was installed and an English
+ * voice reading Devanagari aloud — while `mr-IN-AarohiNeural` was available
+ * server-side the entire time.
+ *
+ * Both engines drive avatar lip-sync through the same estimated walk over the
+ * words. `onboundary` is optional in the spec and most non-English voices never
+ * fire it, so the estimate is what actually animates the mouth in nearly every
+ * lesson; a real boundary event, where one arrives, takes over.
  */
+
+/** Above this the route returns 400, so don't waste the round trip. */
+const MAX_SERVER_CHARS = 3000
 
 /** Lesson language names (from /start) → BCP-47 prefixes. */
 const LANGUAGE_TAGS: Record<string, string> = {
@@ -54,9 +67,12 @@ export interface UseSpeechResult {
   viseme: Viseme
   /** False when the browser has no speech synthesis at all. */
   supported: boolean
-  /** True when no voice matches the lesson language — narration falls back. */
+  /**
+   * True only when server narration has failed *and* the browser has no voice
+   * for this language — i.e. the one case where narration really is degraded.
+   */
   languageUnavailable: boolean
-  /** The resolved voice, so other features (video export) can match it. */
+  /** The resolved browser voice, so the video export can match it. */
   voice: SpeechSynthesisVoice | null
   speak: (text: string) => void
   pause: () => void
@@ -69,7 +85,12 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
   const [paused, setPaused] = useState(false)
   const [viseme, setViseme] = useState<Viseme>('rest')
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
-  const [supported, setSupported] = useState(true)
+  const [browserSupported, setBrowserSupported] = useState(true)
+  /**
+   * Set once the route has actually failed. Until then the browser's voice list
+   * says nothing about what the learner will hear, so no warning is shown.
+   */
+  const [serverUnavailable, setServerUnavailable] = useState(false)
 
   /** Timers for the mouth shapes within a single word. */
   const timersRef = useRef<number[]>([])
@@ -84,10 +105,18 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
   const keepAliveRef = useRef<number | null>(null)
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
 
+  /** Server narration playback. */
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const objectUrlRef = useRef<string | null>(null)
+  /** Which engine is speaking, so pause/resume/stop reach the right one. */
+  const engineRef = useRef<'browser' | 'server'>('browser')
+  /** Discards a fetch that resolves after a newer speak() or a stop(). */
+  const requestIdRef = useRef(0)
+
   // ── Voice list ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      setSupported(false)
+      setBrowserSupported(false)
       return
     }
 
@@ -104,7 +133,11 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
     voices.find((v) => v.lang.toLowerCase().startsWith(tag)) ??
     null
 
-  const languageUnavailable = voices.length > 0 && !voice && tag !== 'en'
+  const languageUnavailable = serverUnavailable && voices.length > 0 && !voice && tag !== 'en'
+
+  // Narration is available if either engine can carry it. A browser with no
+  // speech synthesis at all is still fine while the route answers.
+  const supported = browserSupported || !serverUnavailable
 
   // ── Timer bookkeeping ───────────────────────────────────────────────────────
   const clearTimers = useCallback(() => {
@@ -148,10 +181,9 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
   /**
    * Walks the words on an estimated clock.
    *
-   * `onboundary` is optional in the spec and many voices — most non-English
-   * ones — never fire it, which would leave the mouth motionless for the whole
-   * lesson. This drives the animation from an estimate instead, and is
-   * cancelled the moment a real boundary event proves the voice supports them.
+   * The server engine gives no word-timing information at all, and most browser
+   * voices never fire `onboundary` either, so this is the normal path rather
+   * than the exception. A real boundary event cancels it when one shows up.
    */
   const startFallbackAnimation = useCallback(
     (text: string) => {
@@ -176,10 +208,32 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
     [animateWord],
   )
 
+  const releaseAudio = useCallback(() => {
+    const audio = audioRef.current
+    if (audio) {
+      audio.onplay = null
+      audio.onended = null
+      audio.onerror = null
+      audio.pause()
+      audio.removeAttribute('src')
+    }
+    audioRef.current = null
+
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+      objectUrlRef.current = null
+    }
+  }, [])
+
   // ── Controls ────────────────────────────────────────────────────────────────
   const stop = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    window.speechSynthesis.cancel()
+    // Anything already in flight belongs to a lesson state we have left.
+    requestIdRef.current += 1
+
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+    }
+    releaseAudio()
     clearTimers()
     clearFallback()
     clearKeepAlive()
@@ -187,13 +241,15 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
     setSpeaking(false)
     setPaused(false)
     setViseme('rest')
-  }, [clearTimers, clearFallback, clearKeepAlive])
+  }, [clearTimers, clearFallback, clearKeepAlive, releaseAudio])
 
-  const speak = useCallback(
-    (text: string) => {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-      const trimmed = text?.trim()
-      if (!trimmed) return
+  /** Web Speech API — the fallback when the route cannot be reached. */
+  const speakInBrowser = useCallback(
+    (trimmed: string) => {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        setSpeaking(false)
+        return
+      }
 
       window.speechSynthesis.cancel()
       clearTimers()
@@ -201,6 +257,7 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
       clearKeepAlive()
       boundarySeenRef.current = false
       fallbackIndexRef.current = 0
+      engineRef.current = 'browser'
 
       const utterance = new SpeechSynthesisUtterance(trimmed)
       if (voice) utterance.voice = voice
@@ -256,12 +313,125 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
       utteranceRef.current = utterance
       window.speechSynthesis.speak(utterance)
     },
-    [animateWord, clearTimers, clearFallback, clearKeepAlive, startFallbackAnimation, tag, voice, rate],
+    [
+      animateWord,
+      clearTimers,
+      clearFallback,
+      clearKeepAlive,
+      startFallbackAnimation,
+      tag,
+      voice,
+      rate,
+    ],
+  )
+
+  /** Plays narration returned by the route, and hands back on any failure. */
+  const playServerAudio = useCallback(
+    (url: string, trimmed: string) => {
+      releaseAudio()
+      objectUrlRef.current = url
+
+      const audio = new Audio(url)
+      audio.playbackRate = Math.max(0.6, Math.min(1.4, rate))
+      audioRef.current = audio
+      engineRef.current = 'server'
+
+      // An audio element reports no word boundaries, so the estimated walk is
+      // the only thing driving the mouth here.
+      boundarySeenRef.current = false
+      fallbackIndexRef.current = 0
+
+      const finish = () => {
+        clearTimers()
+        clearFallback()
+        setSpeaking(false)
+        setPaused(false)
+        setViseme('rest')
+      }
+
+      audio.onplay = () => {
+        setSpeaking(true)
+        setPaused(false)
+        startFallbackAnimation(trimmed)
+      }
+      audio.onended = finish
+      audio.onerror = () => {
+        // A codec the browser will not decode. Say it some other way.
+        finish()
+        speakInBrowser(trimmed)
+      }
+
+      void audio.play().catch(() => {
+        // Autoplay refused — the browser voice is subject to the same rule, but
+        // it costs nothing to try.
+        finish()
+        speakInBrowser(trimmed)
+      })
+    },
+    [rate, clearTimers, clearFallback, releaseAudio, startFallbackAnimation, speakInBrowser],
+  )
+
+  const speak = useCallback(
+    (text: string) => {
+      const trimmed = text?.trim()
+      if (!trimmed) return
+
+      stop()
+      const requestId = ++requestIdRef.current
+
+      // The fetch takes a moment; a motionless teacher in that gap reads as a
+      // bug, so the avatar goes live straight away and the mouth starts when
+      // the audio does.
+      setSpeaking(true)
+
+      if (trimmed.length > MAX_SERVER_CHARS) {
+        speakInBrowser(trimmed)
+        return
+      }
+
+      void (async () => {
+        let url: string | null = null
+
+        try {
+          const res = await fetch('/api/teacher/speak', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: trimmed, language }),
+          })
+
+          if (res.ok) {
+            const blob = await res.blob()
+            if (blob.size > 0) url = URL.createObjectURL(blob)
+          }
+        } catch {
+          // Offline, or the dev server restarted mid-lesson.
+        }
+
+        // A newer utterance started, or the learner left. Drop this one.
+        if (requestId !== requestIdRef.current) {
+          if (url) URL.revokeObjectURL(url)
+          return
+        }
+
+        if (url) {
+          setServerUnavailable(false)
+          playServerAudio(url, trimmed)
+        } else {
+          setServerUnavailable(true)
+          speakInBrowser(trimmed)
+        }
+      })()
+    },
+    [language, stop, playServerAudio, speakInBrowser],
   )
 
   const pause = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    window.speechSynthesis.pause()
+    if (engineRef.current === 'server') {
+      audioRef.current?.pause()
+    } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.pause()
+    }
+
     clearTimers()
     clearFallback()
     setPaused(true)
@@ -269,8 +439,12 @@ export function useSpeech(language: string, rate = 0.95): UseSpeechResult {
   }, [clearTimers, clearFallback])
 
   const resume = useCallback(() => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    window.speechSynthesis.resume()
+    if (engineRef.current === 'server') {
+      void audioRef.current?.play().catch(() => {})
+    } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.resume()
+    }
+
     setPaused(false)
 
     // Boundary-driven mouths restart themselves on the next event; the

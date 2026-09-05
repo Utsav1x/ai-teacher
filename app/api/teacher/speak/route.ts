@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { localeForLanguage, voiceForLanguage } from '@/lib/speech/locales'
 
 /** msedge-tts speaks over a WebSocket, so this cannot run on the edge runtime. */
 export const runtime = 'nodejs'
@@ -28,38 +29,13 @@ const MAX_CHARS = 3000
 
 // ─── Edge TTS ─────────────────────────────────────────────────────────────────
 
-/** Lesson language → BCP-47 prefix used to pick a voice. */
-const LANGUAGE_LOCALES: Record<string, string> = {
-  english: 'en-IN',
-  hindi: 'hi-IN',
-  hinglish: 'hi-IN',
-  bengali: 'bn-IN',
-  gujarati: 'gu-IN',
-  kannada: 'kn-IN',
-  malayalam: 'ml-IN',
-  marathi: 'mr-IN',
-  tamil: 'ta-IN',
-  telugu: 'te-IN',
-  urdu: 'ur-IN',
-  spanish: 'es-ES',
-  french: 'fr-FR',
-  german: 'de-DE',
-  mandarin: 'zh-CN',
-  chinese: 'zh-CN',
-  japanese: 'ja-JP',
-  korean: 'ko-KR',
-  portuguese: 'pt-BR',
-  russian: 'ru-RU',
-  arabic: 'ar-EG',
-}
-
 type EdgeVoice = { Name?: string; ShortName?: string; Locale?: string; Gender?: string }
 
 /** Voice list is stable and ~322 entries — fetch once per server process. */
 let voiceCache: EdgeVoice[] | null = null
 
 async function resolveVoice(language: string): Promise<string> {
-  const locale = LANGUAGE_LOCALES[language.trim().toLowerCase()] ?? 'en-IN'
+  const locale = localeForLanguage(language)
 
   try {
     if (!voiceCache) {
@@ -82,7 +58,7 @@ async function resolveVoice(language: string): Promise<string> {
     // Fall through to a known-good default.
   }
 
-  return locale === 'hi-IN' ? 'hi-IN-SwaraNeural' : 'en-IN-NeerjaNeural'
+  return voiceForLanguage(language)
 }
 
 async function synthesizeWithEdge(text: string, language: string): Promise<Buffer | null> {

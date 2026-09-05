@@ -10,6 +10,7 @@ import {
   Play,
   RefreshCw,
   SkipBack,
+  SkipForward,
   Video,
   X,
 } from 'lucide-react'
@@ -323,6 +324,24 @@ export function LessonVideoPlayer({
     }
   }
 
+  /**
+   * Skips to the next scene.
+   *
+   * A scene runs for as long as its narration does, with no way to move on —
+   * so re-watching one part meant sitting through everything before it. This
+   * ends the lesson when there is nothing left, the same as playing to the end.
+   */
+  const handleSkipNext = () => {
+    if (!job) return
+    const clips = job.clips.filter((c) => c.clipStatus === 'done' && c.videoUrl)
+    const nextIndex = currentClipIndex + 1
+    if (nextIndex < clips.length) {
+      playClipAt(nextIndex)
+    } else {
+      onVideoEnd?.()
+    }
+  }
+
   // ─── Derived display info ─────────────────────────────────────────────────────
   const readyClips = job?.clips.filter((c) => c.clipStatus === 'done' && c.videoUrl) ?? []
   const currentClipData: VideoClip | undefined = readyClips[currentClipIndex]
@@ -518,6 +537,27 @@ export function LessonVideoPlayer({
           >
             <SkipBack className="size-4" />
           </Button>
+        )}
+
+        {(playerState === 'playing' || playerState === 'paused') && (
+          <Button
+            size="icon"
+            className="h-9 w-9 rounded-full border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+            aria-label={
+              currentClipIndex + 1 < readyClips.length ? 'Next scene' : 'Finish video'
+            }
+            onClick={handleSkipNext}
+            title={currentClipIndex + 1 < readyClips.length ? 'Next scene' : 'Finish'}
+          >
+            <SkipForward className="size-4" />
+          </Button>
+        )}
+
+        {/* Scene counter, so skipping has somewhere to aim. */}
+        {(playerState === 'playing' || playerState === 'paused') && readyClips.length > 0 && (
+          <span className="ml-auto text-[11px] tabular-nums text-slate-500">
+            Scene {currentClipIndex + 1} of {readyClips.length}
+          </span>
         )}
 
         {playerState !== 'question' && (

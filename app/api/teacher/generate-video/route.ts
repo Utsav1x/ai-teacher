@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { buildScenePlan } from '@/lib/video/scene-planner'
 import { createDIDClip, DEFAULT_PRESENTER_ID } from '@/lib/video/did-provider'
+import { voiceForLanguage } from '@/lib/speech/locales'
 import type { AILesson } from '@/lib/ai/types'
 import type { VideoJob, VideoClip, GenerateVideoRequest } from '@/lib/video/types'
 
@@ -66,7 +67,8 @@ export async function POST(req: NextRequest) {
   const aiLesson = lesson as AILesson
 
   // ── Build scene plan ────────────────────────────────────────────────────────
-  const plan = buildScenePlan(aiLesson, language ?? 'English')
+  const lessonLanguage = language ?? 'English'
+  const plan = buildScenePlan(aiLesson, lessonLanguage)
 
   // Limit the number of scenes to avoid burning too many API credits.
   const scenesToGenerate = plan.scenes.slice(0, MAX_SCENES_PER_JOB)
@@ -78,12 +80,19 @@ export async function POST(req: NextRequest) {
   // ── Submit clips to D-ID ────────────────────────────────────────────────────
   const presenterIdOverride = process.env.DID_PRESENTER_ID ?? DEFAULT_PRESENTER_ID
 
+  // Without an explicit voice, D-ID reads the script in the presenter's default
+  // — English — so a Marathi lesson came back narrated in English over Devanagari
+  // subtitles. D-ID's microsoft provider uses the same voice names as the live
+  // narration route, so both engines speak the lesson in the same language.
+  const voiceId = voiceForLanguage(lessonLanguage)
+
   const clipResults = await Promise.allSettled(
     scenesToGenerate.map(async (scene) => {
       const clip = await createDIDClip({
         apiKey: didApiKey,
         presenterIdOverride,
         script: scene.narration,
+        voiceId,
       })
       return { scene, clip }
     }),
